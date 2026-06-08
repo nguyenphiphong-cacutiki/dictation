@@ -10,15 +10,6 @@ const EMPTY_SENTENCE = (prevEnd = '00:00.000') => ({
   translation: '',
 })
 
-function parseTime(str) {
-  if (!str) return 0
-  const [ms, ...rest] = str.split('.').reverse()
-  const parts = rest.reverse()
-  const seconds = parseFloat(parts.join(':').replace(/:/g, (_, i, a) => i === a.length - 1 ? '.' : ':') || '0')
-  const [m, s] = parts.length >= 2 ? [parseInt(parts[0]), parseFloat(parts[1])] : [0, parseFloat(parts[0] || '0')]
-  const millis = ms ? parseFloat(`0.${ms}`) : 0
-  return m * 60 + s + millis
-}
 
 function toSeconds(timeStr) {
   if (!timeStr) return 0
@@ -125,7 +116,7 @@ export default function CreateLesson() {
   async function handleSave() {
     if (!title.trim()) return setError('Title is required')
     if (!audioKey) return setError(uploading ? 'Wait for audio upload to finish' : 'Please upload an audio file')
-    const cleanedSentences = sentences.map(({ id, ...s }) => s)
+    const cleanedSentences = sentences.map(({ id: _id, ...s }) => s)
 
     setSaving(true)
     setError('')
