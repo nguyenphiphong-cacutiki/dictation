@@ -56,3 +56,7 @@ cd frontend && rm package-lock.json && npm install && cd ..
 ```
 
 Never commit a `package-lock.json` generated with `npm install` on top of an existing (stale) lock file — always delete it first for a clean resolve.
+
+## don't do any add and commit yourself to git
+- don't self run any command like git add, git commit, git push
+- you don't have permission to change git commit or git history
