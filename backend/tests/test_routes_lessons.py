@@ -1,8 +1,6 @@
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from shared.auth import create_token
 from tests.conftest import make_event
 

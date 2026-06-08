@@ -93,3 +93,6 @@ desktop.ini
 # ============================================================
 *.log
 logs/
+
+# personal
+Change_requests.txt

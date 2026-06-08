@@ -1,7 +1,6 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from shared.auth import create_token
 import handler as main_handler
 
 

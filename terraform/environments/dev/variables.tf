@@ -9,17 +9,17 @@ variable "domain" {
 
 variable "cloudflare_zone_id" {
   description = "Cloudflare Zone ID for uetstudio.com"
-  sensitive = true
+  sensitive   = true
 }
 
 variable "from_email" {
   description = "Verified SES sender address"
-  sensitive = true
+  sensitive   = true
 }
 
 variable "admin_emails" {
   description = "Comma-separated admin email addresses"
-  sensitive = true
+  sensitive   = true
 }
 
 variable "environment" {
