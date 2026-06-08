@@ -41,11 +41,14 @@ data "aws_iam_policy_document" "github_trust" {
       test     = "StringLike"
       variable = "${local.github_oidc_url}:sub"
       values = [
+        # branch-triggered runs (no GitHub environment set)
         "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/${var.environment}",
         "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/develop",
         "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/staging",
         "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/main",
         "repo:${var.github_org}/${var.github_repo}:ref:refs/tags/v*",
+        # jobs that set `environment:` — sub changes to :environment:<name>
+        "repo:${var.github_org}/${var.github_repo}:environment:${var.environment}",
       ]
     }
   }
