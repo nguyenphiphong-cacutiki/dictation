@@ -16,8 +16,16 @@ env:
   TF_DIR: terraform/environments/dev
 
 jobs:
+  approval:
+    name: Await manual approval
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - run: echo "Deployment approved"
+
   deploy:
     name: Deploy to dev
+    needs: approval
     runs-on: ubuntu-latest
     environment:
       name: dev

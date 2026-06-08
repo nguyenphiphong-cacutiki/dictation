@@ -16,8 +16,16 @@ env:
   TF_DIR: terraform/environments/prod
 
 jobs:
+  approval:
+    name: Await manual approval
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - run: echo "Deployment approved"
+
   deploy:
     name: Deploy to prod
+    needs: approval
     runs-on: ubuntu-latest
     environment:
       name: prod

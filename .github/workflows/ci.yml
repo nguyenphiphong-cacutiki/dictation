@@ -192,3 +192,42 @@ jobs:
 
       - name: Check formatting
         run: terraform fmt -check -recursive terraform/
+
+  # ── Gate ──────────────────────────────────────────────────────────────────
+
+  ci-gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - secret-scan
+      - backend-security
+      - frontend-audit
+      - terraform-security
+      - backend-lint
+      - backend-test
+      - frontend-lint
+      - frontend-test
+      - frontend-build
+      - terraform-fmt
+    steps:
+      - name: Report job statuses
+        run: |
+          echo "secret-scan        : ${{ needs.secret-scan.result }}"
+          echo "backend-security   : ${{ needs.backend-security.result }}"
+          echo "frontend-audit     : ${{ needs.frontend-audit.result }}"
+          echo "terraform-security : ${{ needs.terraform-security.result }}"
+          echo "backend-lint       : ${{ needs.backend-lint.result }}"
+          echo "backend-test       : ${{ needs.backend-test.result }}"
+          echo "frontend-lint      : ${{ needs.frontend-lint.result }}"
+          echo "frontend-test      : ${{ needs.frontend-test.result }}"
+          echo "frontend-build     : ${{ needs.frontend-build.result }}"
+          echo "terraform-fmt      : ${{ needs.terraform-fmt.result }}"
+
+      - name: Fail if any job did not succeed
+        if: |
+          contains(needs.*.result, 'failure') ||
+          contains(needs.*.result, 'cancelled')
+        run: |
+          echo "One or more CI jobs failed or were cancelled."
+          exit 1
