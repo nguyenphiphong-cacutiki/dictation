@@ -1,0 +1,25 @@
+=== feature ===
++ khi tải video lên và play thì phải có thanh hiện trạng thái đang chạy, chạy đến thời điểm nào rồi, tổng độ dài của audio là bao nhiêu, tôi có thể thể kéo thanh trượt để điều chỉnh phát đoạn nào, và có thêm một ô nhập thời gian để tôi nhập thời điểm muốn phát
++ có phần aboutme để hướng dẫn người khác tạo bài học
++ admin có phần upload raw data để upload stuff cho người khác tải về và làm
++ admin có phần quản lý user, biết được ai đã login, họ đã tạo bài học nào, các phiên họ đăng nhập và logout (hoặc thoát) kèm thời điểm timestamp cụ thể, lưu lại tổng thời gian đã dùng của họ. có thể search theo email
+
+
+=== ci cd ===
++ phải có branch protect, không push thẳng lên dev, staging, main
++ ci là để cho chạy ci trên pr với target branch là dev
++ 3 luồng cd để chạy khi push (hoặc merge pr) và dev, staging, main
++ luồng cd của main phải có manual approve gate
++ hướng dẫn config để chỉ có thể merge vào dev, staging, main khi ci passed
+
+
+=== readme cần catch được những gì?
++ giới thiệu được cơ bản project
++ architecture
++ how to use, deploy
++ it have ci cd pipeline with best practice flow
++ this project use some professional code scan tool, also integrate to ci cd pipeline
++ thêm một vài điều bạn nghĩ nên có
+
+
+=== tạo git và file .gitignore

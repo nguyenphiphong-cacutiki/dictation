@@ -1,0 +1,106 @@
+name: Deploy — Prod
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TF_DIR: terraform/environments/prod
+
+jobs:
+  deploy:
+    name: Deploy to prod
+    runs-on: ubuntu-latest
+    environment:
+      name: prod
+      url: ${{ steps.tf-outputs.outputs.site_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_STG }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # ── Backend ──────────────────────────────────────────────────────────────
+
+      - name: Build backend
+        run: bash build.sh
+        working-directory: backend
+
+      # ── Frontend ─────────────────────────────────────────────────────────────
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci
+        working-directory: frontend
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
+        env:
+          VITE_API_URL: /api
+
+      # ── Terraform ────────────────────────────────────────────────────────────
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+
+      - name: Terraform init
+        run: terraform init
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Terraform apply
+        run: terraform apply -auto-approve -var-file=terraform.tfvars
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          TF_VAR_from_email: ${{ secrets.FROM_EMAIL }}
+          TF_VAR_admin_emails: ${{ secrets.ADMIN_EMAILS }}
+
+      - name: Read Terraform outputs
+        id: tf-outputs
+        run: |
+          echo "frontend_bucket=$(terraform output -raw frontend_bucket)" >> "$GITHUB_OUTPUT"
+          echo "cloudfront_id=$(terraform output -raw cloudfront_distribution_id)" >> "$GITHUB_OUTPUT"
+          echo "site_url=$(terraform output -raw site_url)" >> "$GITHUB_OUTPUT"
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      # ── Static assets ─────────────────────────────────────────────────────────
+
+      - name: Sync assets to S3
+        run: |
+          aws s3 sync frontend/dist/ "s3://${{ steps.tf-outputs.outputs.frontend_bucket }}/" \
+            --delete \
+            --cache-control "public,max-age=31536000,immutable" \
+            --exclude "index.html"
+          aws s3 cp frontend/dist/index.html \
+            "s3://${{ steps.tf-outputs.outputs.frontend_bucket }}/index.html" \
+            --cache-control "no-cache,no-store,must-revalidate"
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ steps.tf-outputs.outputs.cloudfront_id }}" \
+            --paths "/*"

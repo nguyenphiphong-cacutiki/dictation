@@ -1,0 +1,14 @@
+title = "Daily Dictation - Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Ignore test fixtures, example files, and sample configs"
+paths = [
+  '''backend/tests/''',
+  '''frontend/src/__tests__/''',
+  '''\.example$''',
+  '''\.sample$''',
+  '''\.gitleaks\.toml''',
+]

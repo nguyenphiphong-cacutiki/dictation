@@ -1,0 +1,4 @@
+cloudflare_zone_id = "your-cloudflare-zone-id-for-uetstudio.com"
+from_email         = "noreply@uetstudio.com"
+admin_emails       = "nguyenphiphong999@gmail.com"
+jwt_secret         = "stg-generate-a-long-random-secret"
