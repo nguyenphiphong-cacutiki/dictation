@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 
 from shared.auth import require_user
-from shared.db import table, LESSONS_TABLE, PROGRESS_TABLE
+from shared.db import table, PROGRESS_TABLE
 from shared.response import ok, fail
 
 

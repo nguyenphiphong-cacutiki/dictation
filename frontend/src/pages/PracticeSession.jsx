@@ -33,7 +33,7 @@ export default function PracticeSession() {
     try {
       const data = await api.put(`/progress/${id}`, body)
       progressRef.current = data
-    } catch {}
+    } catch { /* progress save is best-effort */ }
   }
 
   function handleComplete() {
@@ -56,7 +56,7 @@ export default function PracticeSession() {
       <div className="max-w-lg mx-auto py-16 text-center space-y-4">
         <div className="text-6xl">🏆</div>
         <h2 className="text-2xl font-bold text-gray-900">Lesson Complete!</h2>
-        <p className="text-gray-600">You've finished "<strong>{lesson.title}</strong>"</p>
+        <p className="text-gray-600">You&apos;ve finished &ldquo;<strong>{lesson.title}</strong>&rdquo;</p>
         <div className="flex gap-3 justify-center mt-6">
           <button className="btn-secondary" onClick={() => navigate('/practice')}>Back to lessons</button>
           <button className="btn-primary" onClick={() => { setCompleted(false); setTab(0) }}>Practice again</button>

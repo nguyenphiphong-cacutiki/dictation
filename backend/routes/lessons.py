@@ -121,15 +121,15 @@ def _list(user):
 
     # Attach progress if user is logged in
     if user:
-        all_ids = [l["lesson_id"] for l in my_lessons]
+        all_ids = [lesson["lesson_id"] for lesson in my_lessons]
         for g in community:
-            all_ids.extend(l["lesson_id"] for l in g["lessons"])
+            all_ids.extend(lesson["lesson_id"] for lesson in g["lessons"])
         progress_map = _bulk_progress(user["user_id"], all_ids)
-        for l in my_lessons:
-            l["progress"] = progress_map.get(l["lesson_id"], {"current_sentence": 0, "practice_count": 0})
+        for lesson in my_lessons:
+            lesson["progress"] = progress_map.get(lesson["lesson_id"], {"current_sentence": 0, "practice_count": 0})
         for g in community:
-            for l in g["lessons"]:
-                l["progress"] = progress_map.get(l["lesson_id"], {"current_sentence": 0, "practice_count": 0})
+            for lesson in g["lessons"]:
+                lesson["progress"] = progress_map.get(lesson["lesson_id"], {"current_sentence": 0, "practice_count": 0})
 
     return ok({"my_lessons": my_lessons, "community": community})
 
@@ -137,7 +137,6 @@ def _list(user):
 def _bulk_progress(user_id, lesson_ids):
     if not lesson_ids:
         return {}
-    prog_tbl = table(PROGRESS_TABLE)
     result = {}
     # Batch get (max 100 per call)
     for i in range(0, len(lesson_ids), 100):

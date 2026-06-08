@@ -4,5 +4,5 @@ resource "cloudflare_record" "app" {
   content = aws_cloudfront_distribution.main.domain_name
   type    = "CNAME"
   ttl     = 1
-  proxied = false  # Must be false — CloudFront handles TLS termination directly
+  proxied = false # Must be false — CloudFront handles TLS termination directly
 }

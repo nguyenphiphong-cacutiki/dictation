@@ -16,11 +16,11 @@ terraform {
   }
 
   backend "s3" {
-    bucket         = "devops-learning-tfstate-897722711000"   # replace with your bucket name
-    key            = "dictation/stg/terraform.tfstate"
-    region         = "ap-southeast-1"
+    bucket       = "devops-learning-tfstate-897722711000" # replace with your bucket name
+    key          = "dictation/stg/terraform.tfstate"
+    region       = "ap-southeast-1"
     use_lockfile = true
-    encrypt        = true   # server-side encryption at rest; state may contain sensitive values
+    encrypt      = true # server-side encryption at rest; state may contain sensitive values
   }
 }
 
