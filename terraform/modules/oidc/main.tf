@@ -42,8 +42,9 @@ data "aws_iam_policy_document" "github_trust" {
       variable = "${local.github_oidc_url}:sub"
       values = [
         "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/${var.environment}",
-        "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/dev",
+        "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/develop",
         "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/staging",
+        "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/main",
         "repo:${var.github_org}/${var.github_repo}:ref:refs/tags/v*",
       ]
     }
