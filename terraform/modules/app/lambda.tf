@@ -34,6 +34,8 @@ resource "aws_lambda_function" "api" {
       OTP_TABLE      = aws_dynamodb_table.otp.name
       LESSONS_TABLE  = aws_dynamodb_table.lessons.name
       PROGRESS_TABLE = aws_dynamodb_table.progress.name
+      SESSIONS_TABLE = aws_dynamodb_table.sessions.name
+      CONFIG_TABLE   = aws_dynamodb_table.config.name
       AUDIO_BUCKET   = aws_s3_bucket.audio.bucket
       FROM_EMAIL     = var.from_email
       ADMIN_EMAILS   = var.admin_emails

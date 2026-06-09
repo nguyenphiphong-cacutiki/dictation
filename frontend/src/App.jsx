@@ -7,6 +7,7 @@ import Practice from './pages/Practice'
 import PracticeSession from './pages/PracticeSession'
 import CreateLesson from './pages/CreateLesson'
 import AdminPanel from './pages/AdminPanel'
+import About from './pages/About'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/create" element={<CreateLesson />} />
           <Route path="/create/:id" element={<CreateLesson />} />
           <Route path="/admin" element={<AdminPanel />} />
+          <Route path="/about" element={<About />} />
         </Route>
         <Route path="*" element={<Navigate to="/practice" replace />} />
       </Routes>

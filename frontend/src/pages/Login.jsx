@@ -32,7 +32,7 @@ export default function Login() {
     setLoading(true)
     try {
       const data = await api.post('/auth/verify-otp', { email: email.trim().toLowerCase(), code: otp.trim() })
-      login(data.token, data.user)
+      login(data.token, data.user, data.session_id)
       navigate('/practice')
     } catch (err) {
       setError(err.message)

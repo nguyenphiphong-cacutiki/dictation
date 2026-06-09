@@ -69,3 +69,42 @@ resource "aws_dynamodb_table" "progress" {
     type = "S"
   }
 }
+
+resource "aws_dynamodb_table" "sessions" {
+  name         = "${local.name_prefix}-sessions"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "session_id"
+
+  attribute {
+    name = "session_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "user_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "login_at"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "user-index"
+    hash_key        = "user_id"
+    range_key       = "login_at"
+    projection_type = "ALL"
+  }
+}
+
+resource "aws_dynamodb_table" "config" {
+  name         = "${local.name_prefix}-config"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "config_key"
+
+  attribute {
+    name = "config_key"
+    type = "S"
+  }
+}

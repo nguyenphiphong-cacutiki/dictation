@@ -38,6 +38,16 @@ export default function Layout() {
             >
               Create Lesson
             </NavLink>
+            <NavLink
+              to="/about"
+              className={({ isActive }) =>
+                `px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive ? 'bg-primary-50 text-primary-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`
+              }
+            >
+              About
+            </NavLink>
             {user?.is_admin && (
               <NavLink
                 to="/admin"

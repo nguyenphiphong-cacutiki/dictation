@@ -142,11 +142,16 @@ class TestVerifyOtp:
 
         otp_tbl = MagicMock()
         users_tbl = MagicMock()
+        sessions_tbl = MagicMock()
         otp_tbl.get_item.return_value = {"Item": otp_item}
         users_tbl.get_item.return_value = {}  # no existing user
 
         def table_factory(name):
-            return otp_tbl if "otp" in name else users_tbl
+            if "otp" in name:
+                return otp_tbl
+            if "session" in name:
+                return sessions_tbl
+            return users_tbl
 
         with patch("routes.auth.table", side_effect=table_factory):
             r = handle(make_event("POST", "/auth/verify-otp",
@@ -155,6 +160,9 @@ class TestVerifyOtp:
 
         assert r["statusCode"] == 200
         users_tbl.put_item.assert_called_once()
+        sessions_tbl.put_item.assert_called_once()
+        body = json.loads(r["body"])
+        assert "session_id" in body
 
     def test_admin_email_gets_admin_flag(self):
         from routes.auth import handle

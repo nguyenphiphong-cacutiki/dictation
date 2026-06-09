@@ -1,7 +1,7 @@
 import sys
 import traceback
 
-from routes import auth, lessons, progress, admin, audio
+from routes import auth, lessons, progress, admin, audio, about, sessions
 from shared.response import fail
 
 _CORS = {
@@ -30,14 +30,20 @@ def handler(event, context):
     try:
         if path.startswith("/auth"):
             resp = auth.handle(event, method, path)
+        elif path == "/admin/about":
+            resp = about.handle(event, method, path)
         elif path.startswith("/admin"):
             resp = admin.handle(event, method, path)
+        elif path.startswith("/about"):
+            resp = about.handle(event, method, path)
         elif path.startswith("/lessons"):
             resp = lessons.handle(event, method, path)
         elif path.startswith("/progress"):
             resp = progress.handle(event, method, path)
         elif path.startswith("/audio"):
             resp = audio.handle(event, method, path)
+        elif path.startswith("/sessions"):
+            resp = sessions.handle(event, method, path)
         else:
             resp = fail("Not found", 404)
     except Exception as e:

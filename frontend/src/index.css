@@ -30,3 +30,22 @@
     @apply bg-white rounded-xl border border-gray-200 shadow-sm;
   }
 }
+
+/* Styles for admin-uploaded HTML content on About page */
+.about-content h1 { @apply text-3xl font-bold text-gray-900 mt-8 mb-4; }
+.about-content h2 { @apply text-2xl font-semibold text-gray-800 mt-6 mb-3; }
+.about-content h3 { @apply text-xl font-semibold text-gray-700 mt-5 mb-2; }
+.about-content p  { @apply text-gray-700 leading-relaxed my-3; }
+.about-content ul { @apply list-disc ml-6 my-3 space-y-1 text-gray-700; }
+.about-content ol { @apply list-decimal ml-6 my-3 space-y-1 text-gray-700; }
+.about-content li { @apply leading-relaxed; }
+.about-content a  { @apply text-primary-600 underline hover:text-primary-700; }
+.about-content blockquote { @apply border-l-4 border-primary-300 pl-4 italic text-gray-600 my-4; }
+.about-content code { @apply bg-gray-100 rounded px-1.5 py-0.5 text-sm font-mono text-gray-800; }
+.about-content pre { @apply bg-gray-900 text-gray-100 rounded-lg p-4 my-4 overflow-x-auto text-sm; }
+.about-content pre code { @apply bg-transparent p-0; }
+.about-content img { @apply max-w-full rounded-lg my-4; }
+.about-content hr { @apply border-gray-200 my-6; }
+.about-content table { @apply w-full border-collapse my-4; }
+.about-content th { @apply bg-gray-100 border border-gray-300 px-3 py-2 text-left font-semibold text-sm; }
+.about-content td { @apply border border-gray-300 px-3 py-2 text-sm; }
