@@ -83,7 +83,7 @@ export default function CreateLesson() {
     }
     audio.addEventListener('timeupdate', onTimeUpdate)
     return () => audio.removeEventListener('timeupdate', onTimeUpdate)
-  }, [])
+  }, [audioObjectUrl])
 
   async function handleFileChange(e) {
     const file = e.target.files[0]
@@ -152,6 +152,7 @@ export default function CreateLesson() {
     if (!audio) return
     stopAtRef.current = null
     audio.currentTime = Math.max(0, Math.min(audioDuration || 0, audio.currentTime + delta))
+    setAudioCurrentTime(audio.currentTime)
   }
 
   function handleSliderChange(e) {
@@ -170,6 +171,7 @@ export default function CreateLesson() {
     if (!audio) return
     stopAtRef.current = null
     audio.currentTime = Math.max(0, Math.min(audioDuration, t))
+    setAudioCurrentTime(audio.currentTime)
     setSeekInput('')
   }
 
