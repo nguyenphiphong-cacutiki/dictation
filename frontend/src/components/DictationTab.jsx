@@ -24,9 +24,28 @@ function checkAnswer(userInput, target) {
     return { correct: false, hint: targetWords[userWords.length], cursorPos: normUser.length, type: 'missing', normUser }
   }
 
-  // Too many words
   const cursorPos = userWords.slice(0, targetWords.length + 1).join(' ').length
   return { correct: false, hint: null, cursorPos, type: 'extra', normUser }
+}
+
+function formatTime(sec) {
+  if (!sec || isNaN(sec) || sec < 0) return '0:00.0'
+  const m = Math.floor(sec / 60)
+  const s = (sec % 60).toFixed(1).padStart(4, '0')
+  return `${m}:${s}`
+}
+
+function parseTimeInput(str) {
+  const trimmed = (str || '').trim()
+  if (!trimmed) return null
+  if (trimmed.includes(':')) {
+    const [mStr, sStr] = trimmed.split(':')
+    const m = parseInt(mStr) || 0
+    const s = parseFloat(sStr) || 0
+    return m * 60 + s
+  }
+  const t = parseFloat(trimmed)
+  return isNaN(t) ? null : t
 }
 
 export default function DictationTab({ sentences, initialSentence, onProgress, onComplete }) {
@@ -36,6 +55,9 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
   const [hint, setHint] = useState('')
   const [hintType, setHintType] = useState('')
   const [showCongrats, setShowCongrats] = useState(false)
+  const [audioDuration, setAudioDuration] = useState(0)
+  const [audioCurrentTime, setAudioCurrentTime] = useState(0)
+  const [timeInput, setTimeInput] = useState('')
   const audioRef = useRef(null)
   const inputRef = useRef(null)
   const stopAtRef = useRef(null)
@@ -55,6 +77,7 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
     if (!audio) return
 
     function onTimeUpdate() {
+      setAudioCurrentTime(audio.currentTime)
       if (stopAtRef.current !== null && audio.currentTime >= stopAtRef.current) {
         audio.pause()
         stopAtRef.current = null
@@ -93,12 +116,24 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [playAudio])
 
+  function seekToTime(time) {
+    const audio = audioRef.current
+    if (!audio) return
+    const clamped = Math.max(0, Math.min(time, audioDuration))
+    stopAtRef.current = null
+    audio.currentTime = clamped
+    // Snap to the sentence containing this timestamp
+    const sentIdx = sentences.findIndex(s => clamped >= s.start && clamped < s.end)
+    if (sentIdx !== -1 && sentIdx !== idx) {
+      setIdx(sentIdx)
+    }
+  }
+
   function handleSubmit(e) {
     e.preventDefault()
     if (!sentence) return
 
     if (showCongrats) {
-      // Advance to next sentence
       const next = idx + 1
       if (next >= sentences.length) {
         onComplete?.()
@@ -117,7 +152,6 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
       return
     }
 
-    // Apply normalization to input for easier correction
     setInput(result.normUser || input)
     setState('error')
     if (result.type === 'wrong') {
@@ -131,7 +165,6 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
       setHintType('extra')
     }
 
-    // Position cursor
     if (result.cursorPos !== undefined) {
       setTimeout(() => {
         if (inputRef.current) {
@@ -144,12 +177,20 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
 
   if (!sentence) return null
 
+  const pct = audioDuration > 0 ? (audioCurrentTime / audioDuration) * 100 : 0
+
   return (
     <div className="space-y-6">
-      {/* Audio (hidden player for sentence audio) */}
-      <audio ref={audioRef} src={sentence.audioUrl} preload="none" className="hidden" />
+      {/* Audio element */}
+      <audio
+        ref={audioRef}
+        src={sentence.audioUrl}
+        preload="metadata"
+        onLoadedMetadata={e => setAudioDuration(e.target.duration)}
+        className="hidden"
+      />
 
-      {/* Progress */}
+      {/* Sentence progress */}
       <div className="flex items-center gap-3">
         <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
           <div
@@ -160,7 +201,50 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
         <span className="text-sm text-gray-500 shrink-0">{idx + 1} / {sentences.length}</span>
       </div>
 
-      {/* Controls */}
+      {/* Audio mini player */}
+      {audioDuration > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+          <div className="relative flex items-center gap-2">
+            <span className="text-xs text-gray-400 font-mono w-14 text-right shrink-0">{formatTime(audioCurrentTime)}</span>
+            <div className="relative flex-1 h-3 flex items-center">
+              <div className="absolute inset-x-0 h-1.5 bg-gray-200 rounded-full" />
+              <div
+                className="absolute left-0 h-1.5 bg-primary-500 rounded-full pointer-events-none"
+                style={{ width: `${pct}%` }}
+              />
+              <input
+                type="range"
+                min={0}
+                max={audioDuration || 1}
+                step={0.1}
+                value={audioCurrentTime}
+                onChange={e => seekToTime(parseFloat(e.target.value))}
+                className="absolute inset-0 w-full opacity-0 cursor-pointer h-full"
+              />
+            </div>
+            <span className="text-xs text-gray-400 font-mono w-14 shrink-0">{formatTime(audioDuration)}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Jump to:</span>
+            <input
+              type="text"
+              value={timeInput}
+              onChange={e => setTimeInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  const t = parseTimeInput(timeInput)
+                  if (t !== null) { seekToTime(t); setTimeInput('') }
+                }
+              }}
+              placeholder="1:30"
+              className="input text-xs py-1 px-2 w-20 font-mono"
+              title="Nhập thời điểm (vd: 1:30 hoặc 90) và nhấn Enter"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Replay button */}
       <div className="flex items-center gap-2">
         <button
           onClick={playAudio}
@@ -206,7 +290,7 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
 
         {showCongrats && (
           <div className="card p-4 border-green-200 bg-green-50 space-y-2">
-            <p className="font-medium text-green-800">Correct! 🎉</p>
+            <p className="font-medium text-green-800">Correct!</p>
             <p className="text-sm text-gray-700 font-mono">{sentence.transcript}</p>
             {sentence.translation && (
               <p className="text-sm text-gray-500 italic">{sentence.translation}</p>

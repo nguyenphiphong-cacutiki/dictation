@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 import boto3
 
 from shared.auth import create_token
-from shared.db import table, USERS_TABLE, OTP_TABLE
+from shared.db import table, USERS_TABLE, OTP_TABLE, SESSIONS_TABLE
 from shared.response import ok, fail
 
 _ses = None
@@ -112,7 +112,16 @@ def _verify_otp(body):
     is_admin = bool(user.get("is_admin")) or email in ADMIN_EMAILS
     token = create_token(user["user_id"], email, is_admin)
 
+    session_id = str(uuid.uuid4())
+    table(SESSIONS_TABLE).put_item(Item={
+        "session_id": session_id,
+        "user_id": user["user_id"],
+        "email": email,
+        "login_at": datetime.now(timezone.utc).isoformat(),
+    })
+
     return ok({
         "token": token,
+        "session_id": session_id,
         "user": {"user_id": user["user_id"], "email": email, "is_admin": is_admin},
     })

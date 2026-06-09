@@ -32,6 +32,9 @@ resource "aws_iam_role_policy" "lambda" {
           aws_dynamodb_table.lessons.arn,
           "${aws_dynamodb_table.lessons.arn}/index/*",
           aws_dynamodb_table.progress.arn,
+          aws_dynamodb_table.sessions.arn,
+          "${aws_dynamodb_table.sessions.arn}/index/*",
+          aws_dynamodb_table.config.arn,
         ]
       },
       {

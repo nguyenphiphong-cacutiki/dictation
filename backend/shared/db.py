@@ -7,6 +7,8 @@ USERS_TABLE = os.environ.get("USERS_TABLE", "dictation-users")
 OTP_TABLE = os.environ.get("OTP_TABLE", "dictation-otp")
 LESSONS_TABLE = os.environ.get("LESSONS_TABLE", "dictation-lessons")
 PROGRESS_TABLE = os.environ.get("PROGRESS_TABLE", "dictation-progress")
+SESSIONS_TABLE = os.environ.get("SESSIONS_TABLE", "dictation-sessions")
+CONFIG_TABLE = os.environ.get("CONFIG_TABLE", "dictation-config")
 
 _resource = None
 
