@@ -16,11 +16,12 @@ cd "$ROOT/backend" && bash build.sh
 
 echo "=== 2. Terraform apply ($ENV) ==="
 cd "$TF_DIR"
-terraform init -upgrade
-terraform apply -auto-approve
+terraform init
+terraform apply -auto-approve -var-file=terraform.tfvars
 
 echo "=== 3. Building frontend ==="
 cd "$ROOT/frontend"
+npm ci
 VITE_API_URL="/api" npm run build
 
 BUCKET=$(cd "$TF_DIR" && terraform output -raw frontend_bucket)
