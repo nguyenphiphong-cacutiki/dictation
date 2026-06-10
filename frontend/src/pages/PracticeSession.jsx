@@ -4,6 +4,21 @@ import { api } from '../api/client'
 import DictationTab from '../components/DictationTab'
 import TranscriptTab from '../components/TranscriptTab'
 
+function toSeconds(timeStr) {
+  if (!timeStr && timeStr !== 0) return 0
+  const str = String(timeStr)
+  if (str.includes(':')) {
+    const dotIdx = str.lastIndexOf('.')
+    const timePart = dotIdx !== -1 ? str.slice(0, dotIdx) : str
+    const msPart = dotIdx !== -1 ? str.slice(dotIdx + 1) : ''
+    const [min, sec] = timePart.split(':').map(Number)
+    const ms = msPart ? parseFloat(`0.${msPart}`) : 0
+    return (min || 0) * 60 + (sec || 0) + ms
+  }
+  const v = parseFloat(str)
+  return isNaN(v) ? 0 : v
+}
+
 export default function PracticeSession() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -46,8 +61,8 @@ export default function PracticeSession() {
 
   const sentences = (lesson.sentences || []).map(s => ({
     ...s,
-    start: parseFloat(s.start) || 0,
-    end: parseFloat(s.end) || 0,
+    start: toSeconds(s.start),
+    end: toSeconds(s.end),
     audioUrl: lesson.audio_url,
   }))
 
