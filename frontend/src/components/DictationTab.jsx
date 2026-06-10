@@ -1,7 +1,45 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 
+// Strips all quote/apostrophe-like characters and common punctuation before comparison.
+// This covers the full Unicode range of visually similar quote marks that transcription
+// sources (YouTube captions, etc.) may use instead of a standard keyboard apostrophe.
+const QUOTE_RE = /["'`«´»ʹʻʼʽʾʿˈˊˋʹ͵՚׳᾽᾿῀῾‘’‚‛“”„‟′″‵‶‹›❛❜❝❞＂＇｀]/g
+
 function normalize(text) {
-  return text.toLowerCase().replace(/-/g, ' ').replace(/\s+/g, ' ').trim()
+  return text
+    .toLowerCase()
+    .replace(/[-–—]/g, ' ')
+    .replace(QUOTE_RE, '')
+    .replace(/[.,!?;:()[\]…]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// Maps each normalized word index back to the original token for hint display.
+// Hyphenated words expand to 2 normalized words, so we need this mapping.
+function buildOriginalWordMap(text) {
+  const result = []
+  for (const token of text.split(/\s+/).filter(Boolean)) {
+    const normToken = normalize(token)
+    const count = normToken ? normToken.split(' ').length : 1
+    for (let i = 0; i < count; i++) result.push(token)
+  }
+  return result
+}
+
+// Returns the char position immediately after word at wordIdx (0-based) in the original string.
+// Falls back to text.length when wordIdx exceeds the word count (used for 'missing' case).
+function wordEndInOriginal(text, wordIdx) {
+  let wCount = -1
+  let i = 0
+  while (i < text.length) {
+    while (i < text.length && /\s/.test(text[i])) i++
+    if (i >= text.length) break
+    wCount++
+    while (i < text.length && /\S/.test(text[i])) i++
+    if (wCount === wordIdx) return i
+  }
+  return text.length
 }
 
 function checkAnswer(userInput, target) {
@@ -12,20 +50,19 @@ function checkAnswer(userInput, target) {
 
   const userWords = normUser ? normUser.split(' ') : []
   const targetWords = normTarget ? normTarget.split(' ') : []
+  const origWords = buildOriginalWordMap(target)
 
   for (let i = 0; i < Math.min(userWords.length, targetWords.length); i++) {
     if (userWords[i] !== targetWords[i]) {
-      const cursorPos = userWords.slice(0, i + 1).join(' ').length
-      return { correct: false, hint: targetWords[i], cursorPos, type: 'wrong', normUser }
+      return { correct: false, hint: origWords[i] ?? targetWords[i], wordIdx: i, type: 'wrong' }
     }
   }
 
   if (userWords.length < targetWords.length) {
-    return { correct: false, hint: targetWords[userWords.length], cursorPos: normUser.length, type: 'missing', normUser }
+    return { correct: false, hint: origWords[userWords.length] ?? targetWords[userWords.length], wordIdx: userWords.length, type: 'missing' }
   }
 
-  const cursorPos = userWords.slice(0, targetWords.length + 1).join(' ').length
-  return { correct: false, hint: null, cursorPos, type: 'extra', normUser }
+  return { correct: false, hint: null, wordIdx: targetWords.length, type: 'extra' }
 }
 
 function formatTime(sec) {
@@ -60,6 +97,7 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
   const [timeInput, setTimeInput] = useState('')
   const audioRef = useRef(null)
   const inputRef = useRef(null)
+  const submitBtnRef = useRef(null)
   const stopAtRef = useRef(null)
 
   const sentence = sentences[idx]
@@ -93,7 +131,8 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
     setState('idle')
     setHint('')
     setShowCongrats(false)
-    inputRef.current?.focus()
+    // Defer focus: setShowCongrats(false) hasn't re-rendered yet, textarea is still disabled
+    setTimeout(() => inputRef.current?.focus(), 0)
     const audio = audioRef.current
     const s = sentences[idx]
     if (audio && s) {
@@ -106,6 +145,13 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx])
+
+  // Focus submit button when congrats shows so Enter advances to next sentence
+  useEffect(() => {
+    if (showCongrats) {
+      submitBtnRef.current?.focus()
+    }
+  }, [showCongrats])
 
   // Ctrl key replay
   useEffect(() => {
@@ -122,7 +168,6 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
     const clamped = Math.max(0, Math.min(time, audioDuration))
     stopAtRef.current = null
     audio.currentTime = clamped
-    // Snap to the sentence containing this timestamp
     const sentIdx = sentences.findIndex(s => clamped >= s.start && clamped < s.end)
     if (sentIdx !== -1 && sentIdx !== idx) {
       setIdx(sentIdx)
@@ -152,7 +197,6 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
       return
     }
 
-    setInput(result.normUser || input)
     setState('error')
     if (result.type === 'wrong') {
       setHint(`Hint: "${result.hint}"`)
@@ -165,14 +209,13 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
       setHintType('extra')
     }
 
-    if (result.cursorPos !== undefined) {
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus()
-          inputRef.current.setSelectionRange(result.cursorPos, result.cursorPos)
-        }
-      }, 0)
-    }
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus()
+        const pos = wordEndInOriginal(input, result.wordIdx)
+        inputRef.current.setSelectionRange(pos, pos)
+      }
+    }, 0)
   }
 
   if (!sentence) return null
@@ -180,8 +223,7 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
   const pct = audioDuration > 0 ? (audioCurrentTime / audioDuration) * 100 : 0
 
   return (
-    <div className="space-y-6">
-      {/* Audio element */}
+    <div className="flex gap-6 items-start">
       <audio
         ref={audioRef}
         src={sentence.audioUrl}
@@ -190,62 +232,50 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
         className="hidden"
       />
 
-      {/* Sentence progress */}
-      <div className="flex items-center gap-3">
-        <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-primary-500 rounded-full transition-all duration-300"
-            style={{ width: `${Math.round(((idx) / sentences.length) * 100)}%` }}
-          />
-        </div>
-        <span className="text-sm text-gray-500 shrink-0">{idx + 1} / {sentences.length}</span>
-      </div>
-
-      {/* Audio mini player */}
-      {audioDuration > 0 && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
-          <div className="relative flex items-center gap-2">
-            <span className="text-xs text-gray-400 font-mono w-14 text-right shrink-0">{formatTime(audioCurrentTime)}</span>
-            <div className="relative flex-1 h-3 flex items-center">
-              <div className="absolute inset-x-0 h-1.5 bg-gray-200 rounded-full" />
-              <div
-                className="absolute left-0 h-1.5 bg-primary-500 rounded-full pointer-events-none"
-                style={{ width: `${pct}%` }}
-              />
+      {/* Left: audio controls */}
+      <div className="w-1/2 space-y-4 shrink-0">
+        {audioDuration > 0 && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+            <div className="relative flex items-center gap-2">
+              <span className="text-xs text-gray-400 font-mono w-14 text-right shrink-0">{formatTime(audioCurrentTime)}</span>
+              <div className="relative flex-1 h-3 flex items-center">
+                <div className="absolute inset-x-0 h-1.5 bg-gray-200 rounded-full" />
+                <div
+                  className="absolute left-0 h-1.5 bg-primary-500 rounded-full pointer-events-none"
+                  style={{ width: `${pct}%` }}
+                />
+                <input
+                  type="range"
+                  min={0}
+                  max={audioDuration || 1}
+                  step={0.1}
+                  value={audioCurrentTime}
+                  onChange={e => seekToTime(parseFloat(e.target.value))}
+                  className="absolute inset-0 w-full opacity-0 cursor-pointer h-full"
+                />
+              </div>
+              <span className="text-xs text-gray-400 font-mono w-14 shrink-0">{formatTime(audioDuration)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">Jump to:</span>
               <input
-                type="range"
-                min={0}
-                max={audioDuration || 1}
-                step={0.1}
-                value={audioCurrentTime}
-                onChange={e => seekToTime(parseFloat(e.target.value))}
-                className="absolute inset-0 w-full opacity-0 cursor-pointer h-full"
+                type="text"
+                value={timeInput}
+                onChange={e => setTimeInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    const t = parseTimeInput(timeInput)
+                    if (t !== null) { seekToTime(t); setTimeInput('') }
+                  }
+                }}
+                placeholder="1:30"
+                className="input text-xs py-1 px-2 w-20 font-mono"
+                title="Nhập thời điểm (vd: 1:30 hoặc 90) và nhấn Enter"
               />
             </div>
-            <span className="text-xs text-gray-400 font-mono w-14 shrink-0">{formatTime(audioDuration)}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">Jump to:</span>
-            <input
-              type="text"
-              value={timeInput}
-              onChange={e => setTimeInput(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  const t = parseTimeInput(timeInput)
-                  if (t !== null) { seekToTime(t); setTimeInput('') }
-                }
-              }}
-              placeholder="1:30"
-              className="input text-xs py-1 px-2 w-20 font-mono"
-              title="Nhập thời điểm (vd: 1:30 hoặc 90) và nhấn Enter"
-            />
-          </div>
-        </div>
-      )}
+        )}
 
-      {/* Replay button */}
-      <div className="flex items-center gap-2">
         <button
           onClick={playAudio}
           className="btn-primary gap-2"
@@ -257,52 +287,66 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
         </button>
       </div>
 
-      {/* Input area */}
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <textarea
-          ref={inputRef}
-          value={input}
-          onChange={e => { setInput(e.target.value); setState('idle'); setHint('') }}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              handleSubmit(e)
-            }
-          }}
-          rows={2}
-          className={`input resize-none text-base font-mono transition-colors ${
-            state === 'correct' ? 'border-green-400 bg-green-50' :
-            state === 'error' ? 'border-red-300 bg-red-50' : ''
-          }`}
-          placeholder="Type what you hear… (Enter to check)"
-          disabled={showCongrats}
-        />
-
-        {hint && (
-          <p className={`text-sm px-3 py-2 rounded-lg ${
-            hintType === 'wrong' ? 'bg-amber-50 text-amber-800' :
-            hintType === 'missing' ? 'bg-blue-50 text-blue-800' :
-            'bg-red-50 text-red-800'
-          }`}>
-            {hint}
-          </p>
-        )}
-
-        {showCongrats && (
-          <div className="card p-4 border-green-200 bg-green-50 space-y-2">
-            <p className="font-medium text-green-800">Correct!</p>
-            <p className="text-sm text-gray-700 font-mono">{sentence.transcript}</p>
-            {sentence.translation && (
-              <p className="text-sm text-gray-500 italic">{sentence.translation}</p>
-            )}
-            <p className="text-xs text-gray-400">Press Enter to continue</p>
+      {/* Right: practice area */}
+      <div className="flex-1 space-y-4">
+        {/* Sentence progress */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary-500 rounded-full transition-all duration-300"
+              style={{ width: `${Math.round((idx / sentences.length) * 100)}%` }}
+            />
           </div>
-        )}
+          <span className="text-sm text-gray-500 shrink-0">{idx + 1} / {sentences.length}</span>
+        </div>
 
-        <button type="submit" className="btn-primary w-full">
-          {showCongrats ? (idx === sentences.length - 1 ? 'Finish' : 'Next →') : 'Check (Enter)'}
-        </button>
-      </form>
+        {/* Input area */}
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={e => { setInput(e.target.value); setState('idle'); setHint('') }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                handleSubmit(e)
+              }
+            }}
+            rows={2}
+            className={`input resize-none text-base font-mono transition-colors ${
+              state === 'correct' ? 'border-green-400 bg-green-50' :
+              state === 'error' ? 'border-red-300 bg-red-50' : ''
+            }`}
+            placeholder="Type what you hear… (Enter to check)"
+            disabled={showCongrats}
+          />
+
+          {hint && (
+            <p className={`text-sm px-3 py-2 rounded-lg ${
+              hintType === 'wrong' ? 'bg-amber-50 text-amber-800' :
+              hintType === 'missing' ? 'bg-blue-50 text-blue-800' :
+              'bg-red-50 text-red-800'
+            }`}>
+              {hint}
+            </p>
+          )}
+
+          {showCongrats && (
+            <div className="card p-4 border-green-200 bg-green-50 space-y-2">
+              <p className="font-medium text-green-800">Correct!</p>
+              <p className="text-sm text-gray-700 font-mono">{sentence.transcript}</p>
+              {sentence.translation && (
+                <p className="text-sm text-gray-500 italic">{sentence.translation}</p>
+              )}
+              <p className="text-xs text-gray-400">Press Enter to continue</p>
+            </div>
+          )}
+
+          <button ref={submitBtnRef} type="submit" className="btn-primary w-full">
+            {showCongrats ? (idx === sentences.length - 1 ? 'Finish' : 'Next →') : 'Check (Enter)'}
+          </button>
+        </form>
+      </div>
     </div>
   )
 }

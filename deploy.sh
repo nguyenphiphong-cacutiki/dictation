@@ -2,7 +2,7 @@
 # Usage: bash deploy.sh [environment]   (default: prod)
 set -euo pipefail
 
-ENV="${1:-prod}"
+ENV="${1:-dev}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$ROOT/terraform/environments/$ENV"
 

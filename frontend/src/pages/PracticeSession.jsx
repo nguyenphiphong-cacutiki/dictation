@@ -81,7 +81,7 @@ export default function PracticeSession() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5">
+    <div className="space-y-5">
       <div className="flex items-center gap-3">
         <button onClick={() => navigate('/practice')} className="text-gray-400 hover:text-gray-600 transition-colors">
           <BackIcon />
