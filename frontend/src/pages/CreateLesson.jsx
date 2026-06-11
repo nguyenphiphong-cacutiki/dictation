@@ -58,6 +58,7 @@ export default function CreateLesson() {
   const [seekInput, setSeekInput] = useState('')
   const stopAtRef = useRef(null)
   const fileInputRef = useRef(null)
+  const sentencesBottomRef = useRef(null)
 
   useEffect(() => {
     if (!editId) return
@@ -110,6 +111,7 @@ export default function CreateLesson() {
   function addSentence() {
     const last = sentences[sentences.length - 1]
     setSentences(prev => [...prev, EMPTY_SENTENCE(last?.end || '00:00.000')])
+    setTimeout(() => sentencesBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 0)
   }
 
   function removeSentence(idx) {
@@ -289,8 +291,17 @@ export default function CreateLesson() {
               />
 
               {/* Time */}
-              <div className="flex justify-between text-xs font-mono px-0.5">
-                <span className="text-primary-600 font-semibold">{formatTime(audioCurrentTime)}</span>
+              <div className="flex justify-between items-center text-xs font-mono px-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-primary-600 font-semibold">{formatTime(audioCurrentTime)}</span>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(formatTime(audioCurrentTime))}
+                    className="p-0.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                    title="Copy current time"
+                  >
+                    <CopyIcon />
+                  </button>
+                </div>
                 <span className="text-gray-400">{formatTime(audioDuration)}</span>
               </div>
 
@@ -426,6 +437,7 @@ export default function CreateLesson() {
                 </div>
               </div>
             ))}
+            <div ref={sentencesBottomRef} />
           </div>
         </div>
 
@@ -442,4 +454,7 @@ function PauseIcon() {
 }
 function XIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+}
+function CopyIcon() {
+  return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
 }
