@@ -21,10 +21,10 @@ function toSeconds(timeStr) {
 
 function formatTime(sec) {
   if (!isFinite(sec) || sec < 0) return '0:00.000'
-  const m = Math.floor(sec / 60)
-  const s = Math.floor(sec % 60)
-  const ms = Math.round((sec % 1) * 1000)
-  return `${m}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`
+  const totalMs = Math.round(sec * 1000)
+  const ms = totalMs % 1000
+  const totalSec = Math.floor(totalMs / 1000)
+  return `${Math.floor(totalSec / 60)}:${String(totalSec % 60).padStart(2, '0')}.${String(ms).padStart(3, '0')}`
 }
 
 function parseTimeInput(str) {
@@ -40,6 +40,82 @@ function parseTimeInput(str) {
   return isNaN(v) ? null : v
 }
 
+function _wavStr(view, offset, str) {
+  for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i))
+}
+
+function encodeWav(audioBuffer) {
+  const ch = audioBuffer.numberOfChannels
+  const sr = audioBuffer.sampleRate
+  const n = audioBuffer.length
+  const dataSize = n * ch * 2
+  const header = new ArrayBuffer(44)
+  const hv = new DataView(header)
+  _wavStr(hv, 0, 'RIFF'); hv.setUint32(4, 36 + dataSize, true)
+  _wavStr(hv, 8, 'WAVE'); _wavStr(hv, 12, 'fmt ')
+  hv.setUint32(16, 16, true); hv.setUint16(20, 1, true)
+  hv.setUint16(22, ch, true); hv.setUint32(24, sr, true)
+  hv.setUint32(28, sr * ch * 2, true); hv.setUint16(32, ch * 2, true)
+  hv.setUint16(34, 16, true); _wavStr(hv, 36, 'data'); hv.setUint32(40, dataSize, true)
+  // Int16Array writes are 10-20x faster than DataView.setInt16 in a hot loop
+  const samples = new Int16Array(n * ch)
+  for (let i = 0; i < n; i++) {
+    for (let c = 0; c < ch; c++) {
+      const s = Math.max(-1, Math.min(1, audioBuffer.getChannelData(c)[i]))
+      samples[i * ch + c] = Math.round(s < 0 ? s * 0x8000 : s * 0x7FFF)
+    }
+  }
+  return new Blob([header, samples.buffer], { type: 'audio/wav' })
+}
+
+// For re-trimming stored audio: WAV is 44-byte header + raw 16-bit PCM at 22050 Hz mono.
+// We know this format because we always write it. Fetch only the needed byte range —
+// no full download, no decode, no encode.
+async function retrimStoredWav(url, startSec, endSec) {
+  const SR = 22050
+  const startSample = Math.round(startSec * SR)
+  const endSample = Math.round(endSec * SR)
+  if (endSample <= startSample) throw new Error('Empty trim range')
+  const byteStart = 44 + startSample * 2
+  const byteEnd = 44 + endSample * 2 - 1
+  const res = await fetch(url, { headers: { Range: `bytes=${byteStart}-${byteEnd}` } })
+  if (!res.ok) throw new Error(`Range fetch failed: ${res.status}`)
+  const samples = await res.arrayBuffer()
+  const dataSize = samples.byteLength  // use actual size in case S3 clipped to EOF
+  const header = new ArrayBuffer(44)
+  const hv = new DataView(header)
+  _wavStr(hv, 0, 'RIFF'); hv.setUint32(4, 36 + dataSize, true)
+  _wavStr(hv, 8, 'WAVE'); _wavStr(hv, 12, 'fmt ')
+  hv.setUint32(16, 16, true); hv.setUint16(20, 1, true)
+  hv.setUint16(22, 1, true); hv.setUint32(24, SR, true)
+  hv.setUint32(28, SR * 2, true); hv.setUint16(32, 2, true)
+  hv.setUint16(34, 16, true); _wavStr(hv, 36, 'data'); hv.setUint32(40, dataSize, true)
+  return new Blob([header, samples], { type: 'audio/wav' })
+}
+
+async function trimAudioBuffer(arrayBuffer, startSec, endSec) {
+  const Ctx = window.AudioContext || window.webkitAudioContext
+  const ctx = new Ctx()
+  let full
+  try {
+    full = await ctx.decodeAudioData(arrayBuffer)
+  } finally {
+    ctx.close()
+  }
+  // Render at 22050 Hz mono: 4x smaller than 44100 Hz stereo → much faster upload.
+  // OfflineAudioContext handles resampling + stereo→mono downmix natively,
+  // and renders faster than real-time.
+  const targetSR = 22050
+  const duration = endSec - startSec
+  const frameCount = Math.max(1, Math.round(duration * targetSR))
+  const offlineCtx = new OfflineAudioContext(1, frameCount, targetSR)
+  const source = offlineCtx.createBufferSource()
+  source.buffer = full
+  source.connect(offlineCtx.destination)
+  source.start(0, startSec, duration)
+  return await offlineCtx.startRendering()
+}
+
 export default function CreateLesson() {
   const { id: editId } = useParams()
   const navigate = useNavigate()
@@ -48,10 +124,11 @@ export default function CreateLesson() {
   const [audioFile, setAudioFile] = useState(null)
   const [audioKey, setAudioKey] = useState('')
   const [audioObjectUrl, setAudioObjectUrl] = useState('')
-  const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [saveStep, setSaveStep] = useState('')
   const [error, setError] = useState('')
   const audioRef = useRef(null)
+  const origTrimBoundsRef = useRef({ firstMs: null, lastMs: null })
   const [mainPlaying, setMainPlaying] = useState(false)
   const [audioDuration, setAudioDuration] = useState(0)
   const [audioCurrentTime, setAudioCurrentTime] = useState(0)
@@ -64,11 +141,19 @@ export default function CreateLesson() {
     if (!editId) return
     api.get(`/lessons/${editId}`).then(data => {
       setTitle(data.title || '')
-      setSentences(data.sentences?.length
+      const loaded = data.sentences?.length
         ? data.sentences.map(s => ({ ...s, id: s.id || Math.random().toString(36).slice(2) }))
-        : [EMPTY_SENTENCE()])
+        : [EMPTY_SENTENCE()]
+      setSentences(loaded)
       setAudioKey(data.audio_key || '')
       if (data.audio_url) setAudioObjectUrl(data.audio_url)
+
+      // Record original trim bounds so we can detect changes on save
+      const rawLoaded = loaded.map(({ id: _id, ...s }) => s)
+      const timed = rawLoaded.filter(s => s.start && s.end && toSeconds(s.end) > toSeconds(s.start))
+      origTrimBoundsRef.current = timed.length > 0
+        ? { firstMs: Math.round(toSeconds(timed[0].start) * 1000), lastMs: Math.round(toSeconds(timed[timed.length - 1].end) * 1000) }
+        : { firstMs: null, lastMs: null }
     }).catch(() => {})
   }, [editId])
 
@@ -86,26 +171,16 @@ export default function CreateLesson() {
     return () => audio.removeEventListener('timeupdate', onTimeUpdate)
   }, [audioObjectUrl])
 
-  async function handleFileChange(e) {
+  function handleFileChange(e) {
     const file = e.target.files[0]
     if (!file) return
     setAudioFile(file)
-    const objUrl = URL.createObjectURL(file)
-    setAudioObjectUrl(objUrl)
+    if (audioObjectUrl && !editId) URL.revokeObjectURL(audioObjectUrl)
+    setAudioObjectUrl(URL.createObjectURL(file))
     setAudioKey('')
     setAudioDuration(0)
     setAudioCurrentTime(0)
-    setUploading(true)
     setError('')
-    try {
-      const { upload_url, audio_key } = await api.post('/audio/upload-url', { content_type: file.type })
-      await fetch(upload_url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
-      setAudioKey(audio_key)
-    } catch (err) {
-      setError('Audio upload failed: ' + err.message)
-    } finally {
-      setUploading(false)
-    }
   }
 
   function addSentence() {
@@ -179,21 +254,99 @@ export default function CreateLesson() {
 
   async function handleSave() {
     if (!title.trim()) return setError('Title is required')
-    if (!audioKey) return setError(uploading ? 'Wait for audio upload to finish' : 'Please upload an audio file')
-    const cleanedSentences = sentences.map(({ id: _id, ...s }) => s)
+    if (!audioKey && !audioFile) return setError('Please upload an audio file')
+
+    const rawSentences = sentences.map(({ id: _id, ...s }) => s)
     setSaving(true)
+    setSaveStep('')
     setError('')
+
     try {
+      let finalAudioKey = audioKey
+      let finalSentences = rawSentences
+
+      const timed = rawSentences.filter(s => s.start && s.end && toSeconds(s.end) > toSeconds(s.start))
+      const firstStartMs = timed.length > 0 ? Math.round(toSeconds(timed[0].start) * 1000) : 0
+      const lastEndMs = timed.length > 0 ? Math.round(toSeconds(timed[timed.length - 1].end) * 1000) : 0
+      const hasBounds = timed.length > 0 && lastEndMs > firstStartMs
+
+      const orig = origTrimBoundsRef.current
+      const boundsChanged = orig.firstMs !== firstStartMs || orig.lastMs !== lastEndMs
+
+      if (audioFile) {
+        // New audio file — always trim to bounds then upload
+        if (hasBounds) {
+          try {
+            setSaveStep('Trimming…')
+            const arrayBuffer = await audioFile.arrayBuffer()
+            const trimmedBuf = await trimAudioBuffer(arrayBuffer, firstStartMs / 1000, lastEndMs / 1000)
+            const wavBlob = encodeWav(trimmedBuf)
+            setSaveStep('Uploading…')
+            const { upload_url, audio_key: trimmedKey } = await api.post('/audio/upload-url', { content_type: 'audio/wav', audio_key: audioKey })
+            await fetch(upload_url, { method: 'PUT', body: wavBlob, headers: { 'Content-Type': 'audio/wav' } })
+            finalAudioKey = trimmedKey
+            finalSentences = rawSentences.map(s => ({
+              ...s,
+              start: formatTime(Math.max(0, Math.round(toSeconds(s.start) * 1000) - firstStartMs) / 1000),
+              end: formatTime(Math.max(0, Math.round(toSeconds(s.end) * 1000) - firstStartMs) / 1000),
+            }))
+          } catch {
+            // Trimming failed — upload original file as-is
+            setSaveStep('Uploading…')
+            const { upload_url, audio_key } = await api.post('/audio/upload-url', { content_type: audioFile.type, audio_key: audioKey })
+            await fetch(upload_url, { method: 'PUT', body: audioFile, headers: { 'Content-Type': audioFile.type } })
+            finalAudioKey = audio_key
+          }
+        } else {
+          setSaveStep('Uploading…')
+          const { upload_url, audio_key } = await api.post('/audio/upload-url', { content_type: audioFile.type, audio_key: audioKey })
+          await fetch(upload_url, { method: 'PUT', body: audioFile, headers: { 'Content-Type': audioFile.type } })
+          finalAudioKey = audio_key
+        }
+      } else if (hasBounds && boundsChanged) {
+        // No new file, but A or B changed — re-trim the stored audio.
+        // If it's our own WAV (22050 Hz mono 16-bit), use a Range request to fetch only the
+        // needed bytes — no full download, no decode. Fall back to full decode for other formats.
+        setSaveStep('Trimming…')
+        let wavBlob
+        if (audioKey.endsWith('.wav')) {
+          wavBlob = await retrimStoredWav(audioObjectUrl, firstStartMs / 1000, lastEndMs / 1000)
+        } else {
+          const res = await fetch(audioObjectUrl)
+          const arrayBuffer = await res.arrayBuffer()
+          const trimmedBuf = await trimAudioBuffer(arrayBuffer, firstStartMs / 1000, lastEndMs / 1000)
+          wavBlob = encodeWav(trimmedBuf)
+        }
+        setSaveStep('Uploading…')
+        const { upload_url, audio_key: trimmedKey } = await api.post('/audio/upload-url', { content_type: 'audio/wav', audio_key: audioKey })
+        await fetch(upload_url, { method: 'PUT', body: wavBlob, headers: { 'Content-Type': 'audio/wav' } })
+        finalAudioKey = trimmedKey
+        finalSentences = rawSentences.map(s => ({
+          ...s,
+          start: formatTime(Math.max(0, Math.round(toSeconds(s.start) * 1000) - firstStartMs) / 1000),
+          end: formatTime(Math.max(0, Math.round(toSeconds(s.end) * 1000) - firstStartMs) / 1000),
+        }))
+      }
+      // else: no new file + bounds unchanged → keep existing audioKey and sentences as-is
+
+      if (!finalAudioKey) return setError('Audio upload failed')
+
       if (editId) {
-        await api.put(`/lessons/${editId}`, { title, sentences: cleanedSentences, audio_key: audioKey })
+        await api.put(`/lessons/${editId}`, { title, sentences: finalSentences, audio_key: finalAudioKey })
       } else {
-        await api.post('/lessons', { title, sentences: cleanedSentences, audio_key: audioKey })
+        await api.post('/lessons', { title, sentences: finalSentences, audio_key: finalAudioKey })
+      }
+      // The key is reused in place when the format is unchanged; it only differs when
+      // the audio format changed, in which case the old object is now orphaned — delete it.
+      if (audioKey && finalAudioKey !== audioKey) {
+        api.delete('/audio', { audio_key: audioKey }).catch(() => {})
       }
       navigate('/practice')
     } catch (err) {
       setError(err.message)
     } finally {
       setSaving(false)
+      setSaveStep('')
     }
   }
 
@@ -202,7 +355,7 @@ export default function CreateLesson() {
     setSentences([EMPTY_SENTENCE()])
     setAudioFile(null)
     setAudioKey('')
-    if (audioObjectUrl && !editId) URL.revokeObjectURL(audioObjectUrl)
+    if (audioObjectUrl) URL.revokeObjectURL(audioObjectUrl)
     setAudioObjectUrl('')
     setAudioDuration(0)
     setAudioCurrentTime(0)
@@ -226,8 +379,8 @@ export default function CreateLesson() {
           onChange={e => setTitle(e.target.value)}
         />
         <div className="flex gap-2 shrink-0">
-          <button onClick={handleSave} className="btn-primary text-sm" disabled={saving || uploading}>
-            {saving ? 'Saving…' : editId ? 'Save Changes' : 'Create Lesson'}
+          <button onClick={handleSave} className="btn-primary text-sm" disabled={saving}>
+            {saving ? (saveStep || 'Saving…') : editId ? 'Save Changes' : 'Create Lesson'}
           </button>
           {!editId && (
             <button onClick={handleReset} className="btn-secondary text-sm">Reset</button>
@@ -253,14 +406,11 @@ export default function CreateLesson() {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="btn-secondary text-sm"
-                disabled={uploading}
+                disabled={saving}
               >
-                {uploading ? 'Uploading…' : audioObjectUrl ? 'Replace Audio' : 'Upload Audio'}
+                {audioObjectUrl ? 'Replace Audio' : 'Upload Audio'}
               </button>
-              {uploading && (
-                <span className="text-sm text-gray-500 animate-pulse">Uploading to S3…</span>
-              )}
-              {audioKey && !uploading && (
+              {audioKey && !audioFile && (
                 <span className="text-sm text-green-600">Ready</span>
               )}
               <input
