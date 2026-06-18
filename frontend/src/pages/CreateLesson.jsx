@@ -127,6 +127,8 @@ export default function CreateLesson() {
   const [saving, setSaving] = useState(false)
   const [saveStep, setSaveStep] = useState('')
   const [error, setError] = useState('')
+  const [translating, setTranslating] = useState(false)
+  const [translatingIdx, setTranslatingIdx] = useState(null)
   const audioRef = useRef(null)
   const origTrimBoundsRef = useRef({ firstMs: null, lastMs: null })
   const [mainPlaying, setMainPlaying] = useState(false)
@@ -203,6 +205,56 @@ export default function CreateLesson() {
       if (i === idx + 1 && !s.start) return { ...s, start: value }
       return s
     }))
+  }
+
+  // Map the index→Vietnamese object returned by /translate back onto sentences.
+  function applyTranslations(translations) {
+    setSentences(prev => prev.map((s, i) => {
+      const t = translations[String(i)]
+      return t != null ? { ...s, translation: t } : s
+    }))
+  }
+
+  // Translate every sentence that has a transcript but no translation yet,
+  // sending the full ordered transcript as context in one request.
+  async function translateAll() {
+    const targets = sentences.reduce((acc, s, i) => {
+      if (s.transcript.trim() && !s.translation.trim()) acc.push(i)
+      return acc
+    }, [])
+    if (targets.length === 0) return setError('No sentences need translation')
+    setError('')
+    setTranslating(true)
+    try {
+      const { translations } = await api.post('/translate', {
+        sentences: sentences.map(s => ({ transcript: s.transcript })),
+        targets,
+      })
+      applyTranslations(translations)
+    } catch (err) {
+      setError(err.message || 'Translation failed')
+    } finally {
+      setTranslating(false)
+    }
+  }
+
+  // Translate a single sentence (even if it already has a translation),
+  // using all sentences in order as context.
+  async function translateOne(idx) {
+    if (!sentences[idx]?.transcript.trim()) return
+    setError('')
+    setTranslatingIdx(idx)
+    try {
+      const { translations } = await api.post('/translate', {
+        sentences: sentences.map(s => ({ transcript: s.transcript })),
+        targets: [idx],
+      })
+      applyTranslations(translations)
+    } catch (err) {
+      setError(err.message || 'Translation failed')
+    } finally {
+      setTranslatingIdx(null)
+    }
   }
 
   function playSentence(s) {
@@ -520,9 +572,20 @@ export default function CreateLesson() {
             <h2 className="text-sm font-medium text-gray-700">
               Sentences ({sentences.length})
             </h2>
-            <button onClick={addSentence} className="btn-primary text-sm py-1.5">
-              + Add Sentence
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={translateAll}
+                disabled={translating}
+                className="btn-secondary text-sm py-1.5 flex items-center gap-1.5"
+                title="Translate all untranslated sentences with AI"
+              >
+                {translating ? <Spinner /> : <TranslateIcon />}
+                {translating ? 'Translating…' : 'AI Translate All'}
+              </button>
+              <button onClick={addSentence} className="btn-primary text-sm py-1.5">
+                + Add Sentence
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-3 pr-1">
@@ -557,12 +620,22 @@ export default function CreateLesson() {
                       value={s.transcript}
                       onChange={e => updateSentence(idx, 'transcript', e.target.value)}
                     />
-                    <input
-                      className="input text-sm"
-                      placeholder="Translation (optional)"
-                      value={s.translation}
-                      onChange={e => updateSentence(idx, 'translation', e.target.value)}
-                    />
+                    <div className="flex gap-1.5">
+                      <input
+                        className="input text-sm flex-1"
+                        placeholder="Translation (optional)"
+                        value={s.translation}
+                        onChange={e => updateSentence(idx, 'translation', e.target.value)}
+                      />
+                      <button
+                        onClick={() => translateOne(idx)}
+                        disabled={translatingIdx === idx || !s.transcript.trim()}
+                        className="px-2 text-primary-600 hover:bg-primary-50 rounded shrink-0 disabled:opacity-40 disabled:hover:bg-transparent"
+                        title="AI translate this sentence"
+                      >
+                        {translatingIdx === idx ? <Spinner /> : <TranslateIcon />}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Actions */}
@@ -607,4 +680,10 @@ function XIcon() {
 }
 function CopyIcon() {
   return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+}
+function TranslateIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 8l6 6" /><path d="M4 14l6-6 2-3" /><path d="M2 5h12" /><path d="M7 2h1" /><path d="M22 22l-5-10-5 10" /><path d="M14 18h6" /></svg>
+}
+function Spinner() {
+  return <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
 }

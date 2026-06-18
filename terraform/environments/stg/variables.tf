@@ -38,3 +38,9 @@ variable "github_repo" {
   type        = string
 }
 
+variable "openai_model" {
+  description = "OpenAI model used for AI translations"
+  type        = string
+  default     = "gpt-4o-mini"
+}
+

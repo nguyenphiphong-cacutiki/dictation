@@ -41,6 +41,12 @@ variable "lambda_memory_size" {
   default     = 256
 }
 
+variable "openai_model" {
+  description = "OpenAI model used for AI translations"
+  type        = string
+  default     = "gpt-4o-mini"
+}
+
 variable "log_retention_days" {
   description = "CloudWatch log retention in days"
   type        = number

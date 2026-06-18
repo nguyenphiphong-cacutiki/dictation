@@ -1,7 +1,7 @@
 import sys
 import traceback
 
-from routes import auth, lessons, progress, admin, audio, about, sessions
+from routes import auth, lessons, progress, admin, audio, about, sessions, translate
 from shared.response import fail
 
 _CORS = {
@@ -44,6 +44,8 @@ def handler(event, context):
             resp = audio.handle(event, method, path)
         elif path.startswith("/sessions"):
             resp = sessions.handle(event, method, path)
+        elif path.startswith("/translate"):
+            resp = translate.handle(event, method, path)
         else:
             resp = fail("Not found", 404)
     except Exception as e:
