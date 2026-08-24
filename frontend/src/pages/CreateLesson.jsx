@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 
@@ -116,6 +116,153 @@ async function trimAudioBuffer(arrayBuffer, startSec, endSec) {
   return await offlineCtx.startRendering()
 }
 
+// Editor preview player driven by the decoded AudioBuffer (WebAudio) rather than an
+// <audio> element. This is critical for correct trimming: the timestamps the user picks
+// must live in the SAME timeline that decodeAudioData() produces at save time. A media
+// element plays a compressed source (e.g. an uploaded video) on its gapless container
+// timeline, which is offset from the decoded PCM by the codec's encoder-priming/edit-list
+// delay — so picking times against an <audio> element and cutting via decodeAudioData
+// pushed every sentence back by that constant. Picking and cutting in the decoded
+// timeline removes the mismatch entirely.
+function useBufferPlayer(url) {
+  const [duration, setDuration] = useState(0)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [playing, setPlaying] = useState(false)
+  const ctxRef = useRef(null)
+  const bufferRef = useRef(null)
+  const sourceRef = useRef(null)
+  const startCtxTimeRef = useRef(0) // ctx.currentTime when the active source started
+  const startOffsetRef = useRef(0)  // buffer offset the active source started from
+  const pausedAtRef = useRef(0)     // playhead position while not playing
+  const stopAtRef = useRef(null)    // pause automatically once the playhead reaches this
+  const rafRef = useRef(null)
+
+  const position = useCallback(() => {
+    if (sourceRef.current && ctxRef.current) {
+      return startOffsetRef.current + (ctxRef.current.currentTime - startCtxTimeRef.current)
+    }
+    return pausedAtRef.current
+  }, [])
+
+  const stopSource = useCallback(() => {
+    if (sourceRef.current) {
+      sourceRef.current.onended = null
+      try { sourceRef.current.stop() } catch { /* already stopped */ }
+      sourceRef.current.disconnect()
+      sourceRef.current = null
+    }
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+  }, [])
+
+  const tick = useCallback(() => {
+    const pos = position()
+    if (stopAtRef.current !== null && pos >= stopAtRef.current) {
+      pausedAtRef.current = stopAtRef.current
+      stopAtRef.current = null
+      stopSource()
+      setCurrentTime(pausedAtRef.current)
+      setPlaying(false)
+      return
+    }
+    setCurrentTime(pos)
+    rafRef.current = requestAnimationFrame(tick)
+  }, [position, stopSource])
+
+  const play = useCallback((fromSec, stopAt = null) => {
+    const ctx = ctxRef.current
+    const buffer = bufferRef.current
+    if (!ctx || !buffer) return
+    if (ctx.state === 'suspended') ctx.resume()
+    stopSource()
+    const from = Math.max(0, Math.min(buffer.duration, fromSec))
+    const src = ctx.createBufferSource()
+    src.buffer = buffer
+    src.connect(ctx.destination)
+    src.onended = () => {
+      // Natural end of buffer (our own stop() clears onended first, so this is the
+      // genuine end-of-track case).
+      if (sourceRef.current === src) {
+        sourceRef.current = null
+        if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+        pausedAtRef.current = buffer.duration
+        setCurrentTime(buffer.duration)
+        setPlaying(false)
+      }
+    }
+    src.start(0, from)
+    sourceRef.current = src
+    startCtxTimeRef.current = ctx.currentTime
+    startOffsetRef.current = from
+    stopAtRef.current = stopAt
+    setPlaying(true)
+    rafRef.current = requestAnimationFrame(tick)
+  }, [stopSource, tick])
+
+  const pause = useCallback(() => {
+    if (!sourceRef.current) return
+    pausedAtRef.current = position()
+    stopAtRef.current = null
+    stopSource()
+    setCurrentTime(pausedAtRef.current)
+    setPlaying(false)
+  }, [position, stopSource])
+
+  const seek = useCallback((sec) => {
+    const buffer = bufferRef.current
+    const clamped = Math.max(0, Math.min(buffer ? buffer.duration : 0, sec))
+    stopAtRef.current = null
+    if (sourceRef.current) {
+      play(clamped, null) // restart playback from the new position
+    } else {
+      pausedAtRef.current = clamped
+      setCurrentTime(clamped)
+    }
+  }, [play])
+
+  const toggle = useCallback(() => {
+    if (sourceRef.current) {
+      pause()
+    } else {
+      const buffer = bufferRef.current
+      const from = buffer && pausedAtRef.current >= buffer.duration ? 0 : pausedAtRef.current
+      play(from, null)
+    }
+  }, [pause, play])
+
+  // Decode the source into an AudioBuffer whenever the URL changes.
+  useEffect(() => {
+    stopSource()
+    pausedAtRef.current = 0
+    setCurrentTime(0)
+    setPlaying(false)
+    setDuration(0)
+    bufferRef.current = null
+    if (!url) return
+    let cancelled = false
+    const Ctx = window.AudioContext || window.webkitAudioContext
+    if (!ctxRef.current) ctxRef.current = new Ctx()
+    ;(async () => {
+      try {
+        const res = await fetch(url)
+        const bytes = await res.arrayBuffer()
+        const decoded = await ctxRef.current.decodeAudioData(bytes)
+        if (cancelled) return
+        bufferRef.current = decoded
+        setDuration(decoded.duration)
+      } catch { /* leave duration at 0 — preview unavailable, save still works */ }
+    })()
+    return () => { cancelled = true }
+  }, [url, stopSource])
+
+  // Tear down the AudioContext on unmount.
+  useEffect(() => () => {
+    stopSource()
+    if (ctxRef.current) { ctxRef.current.close(); ctxRef.current = null }
+  }, [stopSource])
+
+  return { duration, currentTime, playing, play, pause, seek, toggle }
+}
+
 export default function CreateLesson() {
   const { id: editId } = useParams()
   const navigate = useNavigate()
@@ -129,15 +276,13 @@ export default function CreateLesson() {
   const [error, setError] = useState('')
   const [translating, setTranslating] = useState(false)
   const [translatingIdx, setTranslatingIdx] = useState(null)
-  const audioRef = useRef(null)
   const origTrimBoundsRef = useRef({ firstMs: null, lastMs: null })
-  const [mainPlaying, setMainPlaying] = useState(false)
-  const [audioDuration, setAudioDuration] = useState(0)
-  const [audioCurrentTime, setAudioCurrentTime] = useState(0)
   const [seekInput, setSeekInput] = useState('')
-  const stopAtRef = useRef(null)
   const fileInputRef = useRef(null)
   const sentencesBottomRef = useRef(null)
+
+  const player = useBufferPlayer(audioObjectUrl)
+  const { currentTime: audioCurrentTime, duration: audioDuration, playing: mainPlaying } = player
 
   useEffect(() => {
     if (!editId) return
@@ -159,20 +304,6 @@ export default function CreateLesson() {
     }).catch(() => {})
   }, [editId])
 
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    function onTimeUpdate() {
-      if (stopAtRef.current !== null && audio.currentTime >= stopAtRef.current) {
-        audio.pause()
-        stopAtRef.current = null
-      }
-      setAudioCurrentTime(audio.currentTime)
-    }
-    audio.addEventListener('timeupdate', onTimeUpdate)
-    return () => audio.removeEventListener('timeupdate', onTimeUpdate)
-  }, [audioObjectUrl])
-
   function handleFileChange(e) {
     const file = e.target.files[0]
     if (!file) return
@@ -180,8 +311,6 @@ export default function CreateLesson() {
     if (audioObjectUrl && !editId) URL.revokeObjectURL(audioObjectUrl)
     setAudioObjectUrl(URL.createObjectURL(file))
     setAudioKey('')
-    setAudioDuration(0)
-    setAudioCurrentTime(0)
     setError('')
   }
 
@@ -258,49 +387,29 @@ export default function CreateLesson() {
   }
 
   function playSentence(s) {
-    const audio = audioRef.current
-    if (!audio) return
     const start = toSeconds(s.start)
     const end = toSeconds(s.end)
     if (end <= start) return
-    stopAtRef.current = end
-    audio.currentTime = start
-    audio.play()
+    player.play(start, end)
   }
 
   function toggleMain() {
-    const audio = audioRef.current
-    if (!audio) return
-    stopAtRef.current = null
-    if (mainPlaying) audio.pause()
-    else audio.play()
+    player.toggle()
   }
 
   function seekRelative(delta) {
-    const audio = audioRef.current
-    if (!audio) return
-    stopAtRef.current = null
-    audio.currentTime = Math.max(0, Math.min(audioDuration || 0, audio.currentTime + delta))
-    setAudioCurrentTime(audio.currentTime)
+    player.seek(audioCurrentTime + delta)
   }
 
   function handleSliderChange(e) {
-    const audio = audioRef.current
-    if (!audio) return
-    stopAtRef.current = null
-    audio.currentTime = parseFloat(e.target.value)
-    setAudioCurrentTime(audio.currentTime)
+    player.seek(parseFloat(e.target.value))
   }
 
   function handleSeekKeyDown(e) {
     if (e.key !== 'Enter') return
     const t = parseTimeInput(seekInput)
     if (t === null) return
-    const audio = audioRef.current
-    if (!audio) return
-    stopAtRef.current = null
-    audio.currentTime = Math.max(0, Math.min(audioDuration, t))
-    setAudioCurrentTime(audio.currentTime)
+    player.seek(t)
     setSeekInput('')
   }
 
@@ -409,8 +518,6 @@ export default function CreateLesson() {
     setAudioKey('')
     if (audioObjectUrl) URL.revokeObjectURL(audioObjectUrl)
     setAudioObjectUrl('')
-    setAudioDuration(0)
-    setAudioCurrentTime(0)
     setError('')
   }
 
@@ -478,19 +585,9 @@ export default function CreateLesson() {
             )}
           </div>
 
-          {/* Player */}
+          {/* Player — driven by the decoded AudioBuffer (see useBufferPlayer) */}
           {audioObjectUrl && (
             <div className="card p-4 space-y-4 shrink-0">
-              <audio
-                ref={audioRef}
-                src={audioObjectUrl}
-                onPlay={() => setMainPlaying(true)}
-                onPause={() => setMainPlaying(false)}
-                onEnded={() => setMainPlaying(false)}
-                onLoadedMetadata={e => setAudioDuration(e.target.duration)}
-                preload="metadata"
-                className="hidden"
-              />
 
               {/* Time */}
               <div className="flex justify-between items-center text-xs font-mono px-0.5">
