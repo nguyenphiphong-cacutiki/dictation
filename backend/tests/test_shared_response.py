@@ -1,7 +1,7 @@
 import json
 from decimal import Decimal
 
-from shared.response import ok, fail
+from shared.response import fail, ok
 
 
 def test_ok_default():
@@ -22,7 +22,7 @@ def test_ok_custom_status():
 
 
 def test_ok_decimal_serialized_as_float():
-    r = ok({"count": Decimal("5")})
+    r = ok({"count": Decimal(5)})
     data = json.loads(r["body"])
     assert data["count"] == 5.0
     assert isinstance(data["count"], float)

@@ -12,9 +12,12 @@ resource "aws_lambda_layer_version" "deps" {
   source_code_hash    = fileexists("${local.backend_dir}/dist/lambda_layer.zip") ? filebase64sha256("${local.backend_dir}/dist/lambda_layer.zip") : ""
 }
 
-data "aws_ssm_parameter" "jwt_secret" {
-  name            = "/dictation/${var.environment}/jwt_secret"
-  with_decryption = true
+locals {
+  # SSM parameter names holding secrets. Only the names are passed to the
+  # Lambda as env vars — the values are fetched at runtime so they never land
+  # in Terraform state or the function's environment configuration.
+  jwt_secret_param = "/dictation/${var.environment}/jwt_secret"
+  openai_key_param = "/dictation/${var.environment}/openai_api_key"
 }
 
 resource "aws_lambda_function" "api" {
@@ -30,16 +33,18 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      USERS_TABLE    = aws_dynamodb_table.users.name
-      OTP_TABLE      = aws_dynamodb_table.otp.name
-      LESSONS_TABLE  = aws_dynamodb_table.lessons.name
-      PROGRESS_TABLE = aws_dynamodb_table.progress.name
-      SESSIONS_TABLE = aws_dynamodb_table.sessions.name
-      CONFIG_TABLE   = aws_dynamodb_table.config.name
-      AUDIO_BUCKET   = aws_s3_bucket.audio.bucket
-      FROM_EMAIL     = var.from_email
-      ADMIN_EMAILS   = var.admin_emails
-      JWT_SECRET     = data.aws_ssm_parameter.jwt_secret.value
+      USERS_TABLE          = aws_dynamodb_table.users.name
+      OTP_TABLE            = aws_dynamodb_table.otp.name
+      LESSONS_TABLE        = aws_dynamodb_table.lessons.name
+      PROGRESS_TABLE       = aws_dynamodb_table.progress.name
+      SESSIONS_TABLE       = aws_dynamodb_table.sessions.name
+      CONFIG_TABLE         = aws_dynamodb_table.config.name
+      AUDIO_BUCKET         = aws_s3_bucket.audio.bucket
+      FROM_EMAIL           = var.from_email
+      ADMIN_EMAILS         = var.admin_emails
+      JWT_SECRET_PARAM     = local.jwt_secret_param
+      OPENAI_API_KEY_PARAM = local.openai_key_param
+      OPENAI_MODEL         = var.openai_model
     }
   }
 }

@@ -1,7 +1,12 @@
-import pytest
 import jwt as pyjwt
-
-from shared.auth import create_token, decode_token, get_user, require_user, require_admin
+import pytest
+from shared.auth import (
+    create_token,
+    decode_token,
+    get_user,
+    require_admin,
+    require_user,
+)
 
 
 def _make_event(token=None):
@@ -32,6 +37,7 @@ class TestCreateDecodeToken:
         token = create_token("uid-3", "x@x.com", False)
         monkeypatch.setenv("JWT_SECRET", "wrong-secret")
         import importlib
+
         import shared.auth as auth_mod
         importlib.reload(auth_mod)
         with pytest.raises(pyjwt.PyJWTError):

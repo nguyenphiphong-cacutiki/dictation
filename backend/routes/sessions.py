@@ -1,8 +1,9 @@
 import json
+import sys
 from datetime import datetime, timezone
 
-from shared.db import table, SESSIONS_TABLE, USERS_TABLE
-from shared.response import ok, fail
+from shared.db import SESSIONS_TABLE, USERS_TABLE, table
+from shared.response import fail, ok
 
 
 def handle(event, method, path):
@@ -30,7 +31,7 @@ def _end_session(event, session_id):
         try:
             login_at = datetime.fromisoformat(item["login_at"])
             duration = int((now - login_at).total_seconds())
-        except Exception:
+        except (KeyError, TypeError, ValueError):
             duration = 0
 
     table(SESSIONS_TABLE).update_item(
@@ -49,7 +50,7 @@ def _end_session(event, session_id):
             UpdateExpression="ADD total_seconds :d",
             ExpressionAttributeValues={":d": int(duration)},
         )
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001 — best-effort accumulation must not fail the request
+        print(f"Failed to accumulate total_seconds: {e}", file=sys.stderr)
 
     return ok({"ended": True})

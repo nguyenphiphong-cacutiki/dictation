@@ -2,14 +2,13 @@ import json
 from datetime import datetime, timezone
 
 from boto3.dynamodb.conditions import Key
-
 from shared.auth import require_admin
-from shared.db import table, LESSONS_TABLE, USERS_TABLE, SESSIONS_TABLE
-from shared.response import ok, fail
+from shared.db import LESSONS_TABLE, SESSIONS_TABLE, USERS_TABLE, table
+from shared.response import fail, ok
 
 
 def handle(event, method, path):
-    user, err = require_admin(event)
+    _user, err = require_admin(event)
     if err:
         return err
 

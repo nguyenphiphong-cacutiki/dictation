@@ -1,6 +1,6 @@
 import json
-from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -165,8 +165,8 @@ class TestVerifyOtp:
         assert "session_id" in body
 
     def test_admin_email_gets_admin_flag(self):
-        from routes.auth import handle
         import routes.auth as auth_mod
+        from routes.auth import handle
         original = auth_mod.ADMIN_EMAILS
         auth_mod.ADMIN_EMAILS = {"admin@example.com"}
 

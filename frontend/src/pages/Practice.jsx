@@ -44,6 +44,7 @@ export default function Practice() {
                 key={lesson.lesson_id}
                 lesson={lesson}
                 pulled={lesson.status === 'pulled'}
+                isOwner
               />
             ))}
           </div>

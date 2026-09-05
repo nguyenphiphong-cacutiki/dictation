@@ -62,6 +62,7 @@ module "app" {
   admin_emails       = var.admin_emails
   lambda_memory_size = 256
   log_retention_days = 7
+  openai_model       = var.openai_model
 }
 
 module "oidc" {

@@ -1,9 +1,9 @@
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
-
 from shared.auth import create_token
+
 from tests.conftest import make_event
 
 
@@ -78,6 +78,79 @@ class TestUploadUrl:
 
         assert r["statusCode"] == 200
         assert json.loads(r["body"])["audio_key"].endswith(f".{ext}")
+
+
+class TestUploadUrlReuseKey:
+    def test_reuses_own_key_when_extension_matches(self):
+        from routes.audio import handle
+        token = _token()
+        mock_s3 = MagicMock()
+        mock_s3.generate_presigned_url.return_value = "https://url"
+        with patch("routes.audio.s3", return_value=mock_s3):
+            r = handle(make_event("POST", "/audio/upload-url",
+                                  {"content_type": "audio/wav", "audio_key": "audio/uid-1/abc.wav"}, token=token),
+                       "POST", "/audio/upload-url")
+        assert r["statusCode"] == 200
+        assert json.loads(r["body"])["audio_key"] == "audio/uid-1/abc.wav"
+
+    def test_new_key_when_extension_differs(self):
+        from routes.audio import handle
+        token = _token()
+        mock_s3 = MagicMock()
+        mock_s3.generate_presigned_url.return_value = "https://url"
+        with patch("routes.audio.s3", return_value=mock_s3):
+            r = handle(make_event("POST", "/audio/upload-url",
+                                  {"content_type": "audio/wav", "audio_key": "audio/uid-1/abc.mp3"}, token=token),
+                       "POST", "/audio/upload-url")
+        assert r["statusCode"] == 200
+        key = json.loads(r["body"])["audio_key"]
+        assert key != "audio/uid-1/abc.mp3"
+        assert key.startswith("audio/uid-1/") and key.endswith(".wav")
+
+    def test_new_key_when_other_users_key(self):
+        from routes.audio import handle
+        token = _token()  # uid-1
+        mock_s3 = MagicMock()
+        mock_s3.generate_presigned_url.return_value = "https://url"
+        with patch("routes.audio.s3", return_value=mock_s3):
+            r = handle(make_event("POST", "/audio/upload-url",
+                                  {"content_type": "audio/wav", "audio_key": "audio/uid-2/abc.wav"}, token=token),
+                       "POST", "/audio/upload-url")
+        assert r["statusCode"] == 200
+        key = json.loads(r["body"])["audio_key"]
+        assert not key.startswith("audio/uid-2/")
+        assert key.startswith("audio/uid-1/")
+
+
+class TestDeleteAudio:
+    def test_unauthorized(self):
+        from routes.audio import handle
+        r = handle(make_event("DELETE", "/audio", {"audio_key": "audio/uid-1/test.wav"}),
+                   "DELETE", "/audio")
+        assert r["statusCode"] == 401
+
+    def test_missing_key(self):
+        from routes.audio import handle
+        token = _token()
+        r = handle(make_event("DELETE", "/audio", {}, token=token), "DELETE", "/audio")
+        assert r["statusCode"] == 400
+
+    def test_forbidden_other_user_key(self):
+        from routes.audio import handle
+        token = _token()  # uid-1
+        r = handle(make_event("DELETE", "/audio", {"audio_key": "audio/uid-2/test.wav"}, token=token),
+                   "DELETE", "/audio")
+        assert r["statusCode"] == 403
+
+    def test_success_deletes_own_key(self):
+        from routes.audio import handle
+        token = _token()
+        mock_s3 = MagicMock()
+        with patch("routes.audio.s3", return_value=mock_s3):
+            r = handle(make_event("DELETE", "/audio", {"audio_key": "audio/uid-1/test.wav"}, token=token),
+                       "DELETE", "/audio")
+        assert r["statusCode"] == 200
+        mock_s3.delete_object.assert_called_once_with(Bucket=ANY, Key="audio/uid-1/test.wav")
 
 
 class TestUnknownPath:

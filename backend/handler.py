@@ -1,7 +1,7 @@
 import sys
 import traceback
 
-from routes import auth, lessons, progress, admin, audio, about, sessions
+from routes import about, admin, audio, auth, lessons, progress, sessions, translate
 from shared.response import fail
 
 _CORS = {
@@ -20,7 +20,7 @@ def handler(event, context):
     raw_path = event.get("path") or event.get("rawPath") or "/"
 
     # Strip /api prefix (added by CloudFront behavior path)
-    path = raw_path[4:] if raw_path.startswith("/api") else raw_path
+    path = raw_path.removeprefix("/api")
     if not path:
         path = "/"
 
@@ -44,9 +44,11 @@ def handler(event, context):
             resp = audio.handle(event, method, path)
         elif path.startswith("/sessions"):
             resp = sessions.handle(event, method, path)
+        elif path.startswith("/translate"):
+            resp = translate.handle(event, method, path)
         else:
             resp = fail("Not found", 404)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — top-level Lambda handler must never raise
         print(f"Unhandled error: {e}", file=sys.stderr)
         traceback.print_exc()
         resp = fail("Internal server error", 500)
