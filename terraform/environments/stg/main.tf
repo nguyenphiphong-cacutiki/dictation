@@ -54,15 +54,16 @@ module "app" {
     null          = null
   }
 
-  environment        = var.environment
-  aws_region         = var.aws_region
-  domain             = var.domain
-  cloudflare_zone_id = var.cloudflare_zone_id
-  from_email         = var.from_email
-  admin_emails       = var.admin_emails
-  lambda_memory_size = 256
-  log_retention_days = 7
-  openai_model       = var.openai_model
+  environment           = var.environment
+  aws_region            = var.aws_region
+  domain                = var.domain
+  cloudflare_zone_id    = var.cloudflare_zone_id
+  from_email            = var.from_email
+  admin_emails          = var.admin_emails
+  extra_verified_emails = var.extra_verified_emails
+  lambda_memory_size    = 256
+  log_retention_days    = 7
+  openai_model          = var.openai_model
 }
 
 module "oidc" {

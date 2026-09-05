@@ -85,6 +85,23 @@ function parseTimeInput(str) {
   return isNaN(t) ? null : t
 }
 
+// Selectable replay shortcuts: value is the KeyboardEvent.key to match, label is shown in the UI.
+const REPLAY_KEYS = [
+  { value: 'Control', label: 'Ctrl' },
+  { value: 'Shift', label: 'Shift' },
+  { value: 'F2', label: 'F2' },
+]
+const REPLAY_KEY_STORAGE = 'replay_shortcut'
+
+function loadReplayKey() {
+  try {
+    const v = localStorage.getItem(REPLAY_KEY_STORAGE)
+    return REPLAY_KEYS.some(k => k.value === v) ? v : 'Control'
+  } catch {
+    return 'Control'
+  }
+}
+
 export default function DictationTab({ sentences, initialSentence, onProgress, onComplete }) {
   const [idx, setIdx] = useState(initialSentence || 0)
   const [input, setInput] = useState('')
@@ -95,6 +112,7 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
   const [audioDuration, setAudioDuration] = useState(0)
   const [audioCurrentTime, setAudioCurrentTime] = useState(0)
   const [timeInput, setTimeInput] = useState('')
+  const [replayKey, setReplayKey] = useState(loadReplayKey)
   const audioRef = useRef(null)
   const inputRef = useRef(null)
   const submitBtnRef = useRef(null)
@@ -153,14 +171,24 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
     }
   }, [showCongrats])
 
-  // Ctrl key replay
+  // Replay shortcut (configurable: Ctrl / Shift / F2)
   useEffect(() => {
     function onKeyDown(e) {
-      if (e.key === 'Control') playAudio()
+      if (e.key === replayKey) {
+        if (replayKey === 'F2') e.preventDefault()
+        playAudio()
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [playAudio])
+  }, [playAudio, replayKey])
+
+  function changeReplayKey(value) {
+    setReplayKey(value)
+    try {
+      localStorage.setItem(REPLAY_KEY_STORAGE, value)
+    } catch { /* setting just won't persist */ }
+  }
 
   function seekToTime(time) {
     const audio = audioRef.current
@@ -193,17 +221,25 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
     if (result.correct) {
       setState('correct')
       setShowCongrats(true)
+      // Show the original source sentence in the input box; the answer card shows the translation
+      setInput(sentence.transcript)
       onProgress?.(idx, idx === sentences.length - 1)
       return
     }
 
     setState('error')
+    let nextInput = input
     if (result.type === 'wrong') {
       setHint(`Hint: "${result.hint}"`)
       setHintType('wrong')
     } else if (result.type === 'missing') {
       setHint(`Next word: "${result.hint}"`)
       setHintType('missing')
+      // Append a trailing space so the user can type the next word right away
+      if (nextInput && !/\s$/.test(nextInput)) {
+        nextInput = `${nextInput} `
+        setInput(nextInput)
+      }
     } else {
       setHint('Too many words')
       setHintType('extra')
@@ -212,7 +248,9 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
     setTimeout(() => {
       if (inputRef.current) {
         inputRef.current.focus()
-        const pos = wordEndInOriginal(input, result.wordIdx)
+        const pos = result.type === 'missing'
+          ? nextInput.length
+          : wordEndInOriginal(nextInput, result.wordIdx)
         inputRef.current.setSelectionRange(pos, pos)
       }
     }, 0)
@@ -276,15 +314,30 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
           </div>
         )}
 
-        <button
-          onClick={playAudio}
-          className="btn-primary gap-2"
-          title="Replay (or press Ctrl)"
-        >
-          <ReplayIcon />
-          Replay
-          <span className="text-xs opacity-70">Ctrl</span>
-        </button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={playAudio}
+            className="btn-primary gap-2"
+            title={`Replay (or press ${REPLAY_KEYS.find(k => k.value === replayKey)?.label})`}
+          >
+            <ReplayIcon />
+            Replay
+            <span className="text-xs opacity-70">{REPLAY_KEYS.find(k => k.value === replayKey)?.label}</span>
+          </button>
+          <label className="flex items-center gap-1.5 text-xs text-gray-500">
+            Shortcut:
+            <select
+              value={replayKey}
+              onChange={e => changeReplayKey(e.target.value)}
+              className="input text-xs py-1 px-2 w-auto"
+              title="Keyboard shortcut for Replay"
+            >
+              {REPLAY_KEYS.map(k => (
+                <option key={k.value} value={k.value}>{k.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
 
       {/* Right: practice area */}
@@ -334,7 +387,6 @@ export default function DictationTab({ sentences, initialSentence, onProgress, o
           {showCongrats && (
             <div className="card p-4 border-green-200 bg-green-50 space-y-2">
               <p className="font-medium text-green-800">Correct!</p>
-              <p className="text-sm text-gray-700 font-mono">{sentence.transcript}</p>
               {sentence.translation && (
                 <p className="text-sm text-gray-500 italic">{sentence.translation}</p>
               )}

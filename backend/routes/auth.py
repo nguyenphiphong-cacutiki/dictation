@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import boto3
+from botocore.exceptions import ClientError
 from shared.auth import create_token
 from shared.db import OTP_TABLE, SESSIONS_TABLE, USERS_TABLE, table
 from shared.response import fail, ok
@@ -52,6 +53,23 @@ def _request_otp(body):
         "ttl": expires_at,
     })
 
+    try:
+        _send_otp_email(email, code)
+    except ClientError as e:
+        table(OTP_TABLE).delete_item(Key={"email": email})
+        error_code = e.response.get("Error", {}).get("Code", "")
+        if error_code == "MessageRejected":
+            # SES sandbox: recipients must be verified identities
+            return fail(
+                "This email address cannot receive OTP emails yet. "
+                "Please contact the administrator to enable it.",
+                422,
+            )
+        raise
+    return ok({"message": "OTP sent"})
+
+
+def _send_otp_email(email, code):
     ses().send_email(
         Source=FROM_EMAIL,
         Destination={"ToAddresses": [email]},
@@ -73,7 +91,6 @@ def _request_otp(body):
             },
         },
     )
-    return ok({"message": "OTP sent"})
 
 
 def _verify_otp(body):

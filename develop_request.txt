@@ -1,6 +1,5 @@
-+ tôi muốn có setting tùy chọn phím tắt cho nút replay: ctrl / shift / F2
-+ ở màn practice, sau khi enter và xác nhận đúng thì tôi muốn câu gốc (câu nguyên bản được nhập lúc tạo sentence đó) hiển thị ở ô nhập, ở ô đáp án chỉ hiển thị câu dịch
-+ ở màn practice thì sau khi nhấn enter và hiển thị gợi ý cho next word, thì phải đảm bảo ô nhập của người dùng có sẵn một dấu cách so với ký tự cuối cùng, để người dùng nhập tiếp luôn thay vì phải tự nhập một dấu cách
-
-
-+ ở màn create lesson thì thanh trượt để kéo vị trí audio bị đơ, không dùng được. lúc dừng audio thì mới dùng được thanh trượt đó => fix lỗi này, tôi muốn thanh trượt luôn hoạt động mượt mà
++ I want a setting to customize the keyboard shortcut for the replay button: ctrl / shift / F2
++ On the practice screen, after pressing enter and confirming the answer is correct, I want the original sentence (the source sentence entered when creating that sentence) to be shown in the input box, while the answer box only shows the translated sentence
++ On the practice screen, after pressing enter and the hint for the next word appears, the user's input box should already have a space after the last character, so the user can keep typing right away instead of having to type the space themselves
++ On the create lesson screen, the audio seek slider freezes and doesn't work — it only works when the audio is paused. Please fix this bug; I want the slider to always work smoothly
++ I want the lesson owner, or an admin, to be able to delete the lesson

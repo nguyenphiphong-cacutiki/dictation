@@ -237,6 +237,32 @@ def test_delete_by_admin_removes_lesson(aws):
     assert aws.lessons.get_item(Key={"lesson_id": "l1"}) == {}
 
 
+def test_delete_removes_audio_object_from_s3(aws):
+    _seed_lesson(aws, "l1")
+    assert _call("DELETE", "/lessons/l1", token=OWNER_TOKEN)["statusCode"] == 200
+    assert aws.s3.deleted == [
+        {"bucket": routes_lessons.AUDIO_BUCKET, "key": "audio/u1/l1.wav"}
+    ]
+
+
+def test_delete_skips_s3_when_lesson_has_no_audio_key(aws):
+    _seed_lesson(aws, "l1", audio_key="")
+    assert _call("DELETE", "/lessons/l1", token=OWNER_TOKEN)["statusCode"] == 200
+    assert aws.s3.deleted == []
+
+
+def test_delete_succeeds_even_when_s3_cleanup_fails(aws, monkeypatch):
+    _seed_lesson(aws, "l1")
+
+    def boom(**kwargs):
+        raise RuntimeError("s3 down")
+
+    monkeypatch.setattr(aws.s3, "delete_object", boom)
+    resp = _call("DELETE", "/lessons/l1", token=OWNER_TOKEN)
+    assert body_of(resp) == {"deleted": True}
+    assert aws.lessons.get_item(Key={"lesson_id": "l1"}) == {}
+
+
 def test_unsupported_method_on_lesson_404(aws):
     _seed_lesson(aws, "l1")
     assert _call("PATCH", "/lessons/l1", token=OWNER_TOKEN)["statusCode"] == 404

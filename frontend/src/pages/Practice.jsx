@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
+import { useAuth } from '../contexts/AuthContext'
 import LessonCard from '../components/LessonCard'
 
 export default function Practice() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const { user } = useAuth()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -15,6 +17,25 @@ export default function Practice() {
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [])
+
+  async function handleDelete(lesson) {
+    if (!window.confirm(`Delete lesson "${lesson.title}"? This cannot be undone.`)) return
+    try {
+      await api.delete(`/lessons/${lesson.lesson_id}`)
+      setData(prev => ({
+        ...prev,
+        my_lessons: (prev.my_lessons || []).filter(l => l.lesson_id !== lesson.lesson_id),
+        community: (prev.community || [])
+          .map(group => ({
+            ...group,
+            lessons: group.lessons.filter(l => l.lesson_id !== lesson.lesson_id),
+          }))
+          .filter(group => group.lessons.length > 0),
+      }))
+    } catch (err) {
+      setError(err.message)
+    }
+  }
 
   if (loading) return <div className="flex justify-center py-20"><div className="animate-spin h-8 w-8 border-4 border-primary-600 border-t-transparent rounded-full" /></div>
   if (error) return <p className="text-red-600 py-8 text-center">{error}</p>
@@ -45,6 +66,8 @@ export default function Practice() {
                 lesson={lesson}
                 pulled={lesson.status === 'pulled'}
                 isOwner
+                canDelete
+                onDelete={handleDelete}
               />
             ))}
           </div>
@@ -60,7 +83,12 @@ export default function Practice() {
                 <p className="text-sm font-medium text-gray-500 mb-2">{group.owner_email}</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {group.lessons.map(lesson => (
-                    <LessonCard key={lesson.lesson_id} lesson={lesson} />
+                    <LessonCard
+                      key={lesson.lesson_id}
+                      lesson={lesson}
+                      canDelete={!!user?.is_admin}
+                      onDelete={handleDelete}
+                    />
                   ))}
                 </div>
               </div>

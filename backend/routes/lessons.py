@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import uuid
@@ -258,4 +259,11 @@ def _delete(lesson_id, user):
         return fail("Forbidden", 403)
 
     table(LESSONS_TABLE).delete_item(Key={"lesson_id": lesson_id})
+
+    # Best-effort cleanup of the lesson's audio object
+    audio_key = lesson.get("audio_key")
+    if audio_key and AUDIO_BUCKET:
+        with contextlib.suppress(Exception):
+            s3().delete_object(Bucket=AUDIO_BUCKET, Key=audio_key)
+
     return ok({"deleted": True})

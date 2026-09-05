@@ -30,6 +30,12 @@ variable "from_email" {
   type        = string
 }
 
+variable "extra_verified_emails" {
+  description = "Additional email addresses to verify in SES. While the account is in sandbox mode, every OTP recipient must be listed here (each address receives a verification link to click)."
+  type        = list(string)
+  default     = []
+}
+
 variable "admin_emails" {
   description = "Comma-separated admin email addresses"
   type        = string

@@ -259,6 +259,31 @@ describe('edit mode', () => {
     expect(screen.queryByText('Reset')).not.toBeInTheDocument()
   })
 
+  it('seek slider follows the drag and commits the position on release', async () => {
+    renderCreate(editRoutes, '/create/e1')
+    await screen.findByDisplayValue('Existing lesson')
+    await screen.findByText('0:09.000') // decoded duration → player is up
+
+    const slider = document.querySelector('input[type="range"]')
+    fireEvent.pointerDown(slider)
+    fireEvent.change(slider, { target: { value: '5' } })
+    // While dragging, the readout tracks the drag position (not the playhead)
+    expect(screen.getByText('0:05.000')).toBeInTheDocument()
+    fireEvent.pointerUp(slider)
+    // After release the playhead is committed to the drag position
+    expect(screen.getByText('0:05.000')).toBeInTheDocument()
+  })
+
+  it('seek slider seeks immediately on a change without a drag (keyboard)', async () => {
+    renderCreate(editRoutes, '/create/e1')
+    await screen.findByDisplayValue('Existing lesson')
+    await screen.findByText('0:09.000')
+
+    const slider = document.querySelector('input[type="range"]')
+    fireEvent.change(slider, { target: { value: '3' } })
+    expect(screen.getByText('0:03.000')).toBeInTheDocument()
+  })
+
   it('saves changes without re-uploading when trim bounds are unchanged', async () => {
     const { mockFetch } = renderCreate((url, opts = {}) => {
       if (url.includes('/lessons/e1')) {
