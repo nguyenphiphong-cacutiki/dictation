@@ -53,7 +53,6 @@ class TestRequestOtp:
 
     def test_ses_unverified_recipient_returns_422_and_deletes_otp(self):
         from botocore.exceptions import ClientError
-
         from routes.auth import handle
         mock_tbl = MagicMock()
         mock_ses = MagicMock()
@@ -74,7 +73,6 @@ class TestRequestOtp:
 
     def test_ses_other_client_error_propagates(self):
         from botocore.exceptions import ClientError
-
         from routes.auth import handle
         mock_ses = MagicMock()
         mock_ses.send_email.side_effect = ClientError(
