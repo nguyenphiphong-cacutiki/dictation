@@ -63,6 +63,7 @@ What each test file verifies, by feature. Counts reflect the suite as of
 
 ### `api/client.test.js` → `api/client.js`
 - URL prefixing, methods, JSON bodies, Content-Type; bearer header from localStorage (and omitted without); parsed success payloads; thrown errors carry message/status/data; fallback message; non-JSON error body survived
+- Session expiry: 401 with a stored token clears token/user/session_id/session_start and redirects to `/login`; no redirect for `/auth/*` 401s (wrong OTP), tokenless 401s, or non-401 errors
 
 ### `contexts/AuthContext.test.jsx`
 - Anonymous start; restore from storage; corrupt storage cleared; login persists token/user/session bookkeeping; logout clears + beacons session end; beacon skipped without session; `beforeunload` beacon (with and without session)

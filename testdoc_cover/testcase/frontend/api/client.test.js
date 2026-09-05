@@ -85,3 +85,52 @@ describe('responses and errors', () => {
     await expect(api.get('/x')).rejects.toMatchObject({ message: 'Request failed', status: 502 })
   })
 })
+
+describe('session expiry (401 handling)', () => {
+  let assign
+
+  beforeEach(() => {
+    assign = vi.fn()
+    vi.stubGlobal('location', { assign })
+  })
+
+  it('clears the stored session and redirects to /login on a 401 with a token', async () => {
+    localStorage.setItem('token', 'stale-jwt')
+    localStorage.setItem('user', '{"user_id":"u1"}')
+    localStorage.setItem('session_id', 's1')
+    localStorage.setItem('session_start', '123')
+    mockFetch.mockResolvedValue(jsonRes({ error: 'Unauthorized' }, false, 401))
+
+    await expect(api.get('/lessons')).rejects.toMatchObject({ status: 401 })
+    expect(localStorage.getItem('token')).toBeNull()
+    expect(localStorage.getItem('user')).toBeNull()
+    expect(localStorage.getItem('session_id')).toBeNull()
+    expect(localStorage.getItem('session_start')).toBeNull()
+    expect(assign).toHaveBeenCalledWith('/login')
+  })
+
+  it('does not redirect on a 401 from an /auth/ endpoint (e.g. wrong OTP)', async () => {
+    localStorage.setItem('token', 'jwt')
+    mockFetch.mockResolvedValue(jsonRes({ error: 'Invalid code' }, false, 401))
+
+    await expect(api.post('/auth/verify-otp', { code: '000000' })).rejects.toMatchObject({ status: 401 })
+    expect(localStorage.getItem('token')).toBe('jwt')
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it('does not redirect on a 401 when no token was sent', async () => {
+    mockFetch.mockResolvedValue(jsonRes({ error: 'Unauthorized' }, false, 401))
+
+    await expect(api.get('/lessons')).rejects.toMatchObject({ status: 401 })
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it('does not touch the session on non-401 errors', async () => {
+    localStorage.setItem('token', 'jwt')
+    mockFetch.mockResolvedValue(jsonRes({ error: 'Forbidden' }, false, 403))
+
+    await expect(api.get('/admin/users')).rejects.toMatchObject({ status: 403 })
+    expect(localStorage.getItem('token')).toBe('jwt')
+    expect(assign).not.toHaveBeenCalled()
+  })
+})
