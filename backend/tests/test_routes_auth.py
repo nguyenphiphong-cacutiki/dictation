@@ -51,6 +51,43 @@ class TestRequestOtp:
         mock_tbl.put_item.assert_called_once()
         mock_ses.send_email.assert_called_once()
 
+    def test_ses_unverified_recipient_returns_422_and_deletes_otp(self):
+        from botocore.exceptions import ClientError
+
+        from routes.auth import handle
+        mock_tbl = MagicMock()
+        mock_ses = MagicMock()
+        mock_ses.send_email.side_effect = ClientError(
+            {"Error": {"Code": "MessageRejected",
+                       "Message": "Email address is not verified."}},
+            "SendEmail",
+        )
+
+        with patch("routes.auth.table", return_value=mock_tbl), \
+             patch("routes.auth.ses", return_value=mock_ses):
+            r = handle(make_event("POST", "/auth/request-otp", {"email": "user@example.com"}),
+                       "POST", "/auth/request-otp")
+
+        assert r["statusCode"] == 422
+        assert "cannot receive" in json.loads(r["body"])["error"]
+        mock_tbl.delete_item.assert_called_once_with(Key={"email": "user@example.com"})
+
+    def test_ses_other_client_error_propagates(self):
+        from botocore.exceptions import ClientError
+
+        from routes.auth import handle
+        mock_ses = MagicMock()
+        mock_ses.send_email.side_effect = ClientError(
+            {"Error": {"Code": "Throttling", "Message": "Rate exceeded"}},
+            "SendEmail",
+        )
+
+        with patch("routes.auth.table", return_value=MagicMock()), \
+             patch("routes.auth.ses", return_value=mock_ses), \
+             pytest.raises(ClientError):
+            handle(make_event("POST", "/auth/request-otp", {"email": "user@example.com"}),
+                   "POST", "/auth/request-otp")
+
     def test_email_normalised_to_lowercase(self):
         from routes.auth import handle
         mock_tbl = MagicMock()

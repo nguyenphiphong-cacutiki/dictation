@@ -22,6 +22,12 @@ variable "admin_emails" {
   sensitive   = true
 }
 
+variable "extra_verified_emails" {
+  description = "Recipient addresses to verify in SES (required while the account is in sandbox mode)"
+  type        = list(string)
+  default     = []
+}
+
 variable "environment" {
   description = "Environment"
   type        = string

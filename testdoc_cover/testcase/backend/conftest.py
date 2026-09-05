@@ -121,8 +121,15 @@ class FakeDDB:
 class FakeSES:
     def __init__(self):
         self.sent = []
+        self.error_code = None  # e.g. "MessageRejected" to simulate a send failure
 
     def send_email(self, **kwargs):
+        if self.error_code:
+            from botocore.exceptions import ClientError
+            raise ClientError(
+                {"Error": {"Code": self.error_code, "Message": "simulated SES failure"}},
+                "SendEmail",
+            )
         self.sent.append(kwargs)
         return {"MessageId": "fake-message-id"}
 

@@ -13,6 +13,7 @@ What each test file verifies, by feature. Counts reflect the suite as of
 
 ### `routes/test_auth.py` → OTP login
 - request-otp: invalid email (empty / no `@`); code stored with 10-min TTL; SES email carries the code; email lowercased/trimmed
+- request-otp SES failures: unverified recipient (`MessageRejected`, e.g. SES sandbox) → 422 with a clear message and the stored OTP deleted; any other SES `ClientError` propagates (→ 500 at the handler) with the OTP also cleaned up
 - verify-otp: missing fields; unknown/expired/wrong code → 401; success creates user + session, consumes OTP, returns decodable JWT; ADMIN_EMAILS grants admin; existing user keeps `user_id`
 - 6-digit numeric OTP generator; unknown subpath → 404
 

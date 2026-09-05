@@ -1,6 +1,8 @@
 """Covers backend/routes/auth.py — OTP request and verification flows."""
 from datetime import datetime, timedelta, timezone
 
+import pytest
+from botocore.exceptions import ClientError
 from routes import auth as routes_auth
 from shared.auth import decode_token
 
@@ -57,6 +59,23 @@ def test_request_otp_stores_code_and_sends_email(aws):
     mail = aws.ses.sent[0]
     assert mail["Destination"]["ToAddresses"] == ["user@example.com"]
     assert stored["code"] in mail["Message"]["Body"]["Text"]["Data"]
+
+
+def test_request_otp_unverified_recipient_422_and_otp_cleaned_up(aws):
+    """SES sandbox rejects unverified recipients — user gets a clear 422, not a 500."""
+    aws.ses.error_code = "MessageRejected"
+    resp = _request_otp("blocked@example.com")
+    assert resp["statusCode"] == 422
+    assert "cannot receive" in body_of(resp)["error"]
+    # the stored OTP must not linger for an email that never went out
+    assert aws.otp.get_item(Key={"email": "blocked@example.com"}) == {}
+
+
+def test_request_otp_other_ses_error_propagates(aws):
+    aws.ses.error_code = "Throttling"
+    with pytest.raises(ClientError):
+        _request_otp("someone@example.com")
+    assert aws.otp.get_item(Key={"email": "someone@example.com"}) == {}
 
 
 def test_verify_otp_requires_email_and_code():

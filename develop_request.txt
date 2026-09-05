@@ -4,3 +4,4 @@
 
 
 + ở màn create lesson thì thanh trượt để kéo vị trí audio bị đơ, không dùng được. lúc dừng audio thì mới dùng được thanh trượt đó => fix lỗi này, tôi muốn thanh trượt luôn hoạt động mượt mà
++ tôi muốn owner của một lesson, hoặc admin có thể xóa lesson
