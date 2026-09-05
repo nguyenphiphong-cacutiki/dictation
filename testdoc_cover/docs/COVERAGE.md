@@ -37,7 +37,7 @@ What each test file verifies, by feature. Counts reflect the suite as of
 - Get: 404 missing / trailing-slash; pulled hidden from strangers, visible to owner/admin; presigned `audio_url` (None without key); progress only when logged in
 - Create: auth/title/audio required; 201 persists full metadata, trimmed title, sentence_count
 - Update: auth/404/403; field+count updates; owner update republishes a pulled lesson; admin update of someone else's pulled lesson does **not** republish
-- Delete: auth/404/403; owner and admin can delete; unsupported method → 404
+- Delete: auth/404/403; owner and admin can delete; audio object removed from S3 (skipped without audio_key; S3 failure doesn't fail the request); unsupported method → 404
 
 ### `routes/test_progress.py` → practice progress
 - Auth required; lesson id required; unsupported method → 404
@@ -76,10 +76,10 @@ What each test file verifies, by feature. Counts reflect the suite as of
 - Brand/nav/email/outlet render; Admin link only for admins; sign out logs out and lands on /login
 
 ### `components/LessonCard.test.jsx`
-- Title/count; progress % + bar visibility rules (none / partial / complete); pulled feedback; practice-count star + badge; card → practice navigation; owner-only edit button navigating to editor (with stopPropagation); zero sentence_count safe
+- Title/count; progress % + bar visibility rules (none / partial / complete); pulled feedback; practice-count star + badge; card → practice navigation; owner-only edit button navigating to editor (with stopPropagation); delete button gated on `canDelete` and firing `onDelete` without opening the card; zero sentence_count safe
 
 ### `components/DictationTab.test.jsx`
-- Position display + initialSentence; correct answers (exact, case/punctuation-insensitive, apostrophe/hyphen normalization); translation shown on success; wrong/missing/extra hint types with original-token hints; hint cleared on typing; advance + progress callbacks; last-sentence completion (`onProgress(idx, true)` + `onComplete`); Ctrl replay and replay button; empty sentence list renders nothing
+- Position display + initialSentence; correct answers (exact, case/punctuation-insensitive, apostrophe/hyphen normalization); on success the source sentence fills the input and the card shows only the translation; wrong/missing/extra hint types with original-token hints; missing-word hint appends a trailing space (once) so typing continues; hint cleared on typing; advance + progress callbacks; last-sentence completion (`onProgress(idx, true)` + `onComplete`); replay button and configurable replay shortcut (Ctrl default, switch to Shift/F2, localStorage persistence + restore, invalid value falls back to Ctrl); empty sentence list renders nothing
 
 ### `components/TranscriptTab.test.jsx`
 - Sentence list with timestamps/translations; play/pause toggling via media events; click-to-seek in full-audio mode; jump-to input (parse, clamp, invalid); sentence mode: toggle on/off, counter, prev/next bounds, entry at current playback position, click-to-play a sentence, auto-advance at sentence end, pause after last sentence
@@ -88,7 +88,7 @@ What each test file verifies, by feature. Counts reflect the suite as of
 - Email step; OTP request with normalized email; server errors on both steps; verification → login storage + navigate; change-email reset
 
 ### `pages/Practice.test.jsx`
-- Loading spinner; error state; empty state; my + grouped community lessons; pulled badge passthrough; new-lesson navigation
+- Loading spinner; error state; empty state; my + grouped community lessons; pulled badge passthrough; new-lesson navigation; deletion (confirm-gated DELETE + card removal, dismissed confirm aborts, backend error surfaced, delete button owner-only for regular users, admin can delete community lessons and empty owner groups disappear)
 
 ### `pages/About.test.jsx`
 - Loading; empty placeholder; HTML content rendering; fetch-failure fallback
@@ -100,4 +100,4 @@ What each test file verifies, by feature. Counts reflect the suite as of
 - Non-admin redirect; lessons tab sections, pull modal (feedback gate, PUT, optimistic move, cancel), restore; users tab list/badges/duration formatting, search filter, expand loads sessions+lessons; about tab load/save/preview
 
 ### `pages/CreateLesson.test.jsx`
-- Initial row; add sentence seeds start from previous end; end-time propagation to empty next start; remove row; reset; title/audio validation; translate-all (no candidates, success mapping, backend error), per-sentence translate (disabled gate, success); create flow with file upload (upload-url body, S3 PUT, lesson POST payload); backend error surfaced; edit mode load (fields, buttons); save-without-retrim when bounds unchanged (PUT payload, no upload-url call)
+- Initial row; add sentence seeds start from previous end; end-time propagation to empty next start; remove row; reset; title/audio validation; translate-all (no candidates, success mapping, backend error), per-sentence translate (disabled gate, success); create flow with file upload (upload-url body, S3 PUT, lesson POST payload); backend error surfaced; edit mode load (fields, buttons); seek-slider scrubbing (readout tracks drag, position committed on release, immediate seek on non-drag change); save-without-retrim when bounds unchanged (PUT payload, no upload-url call)

@@ -87,6 +87,19 @@ it('edit button navigates to the editor without opening the lesson', () => {
   expect(screen.queryByText('PRACTICE-l1')).not.toBeInTheDocument()
 })
 
+it('shows the delete button only when canDelete is set', () => {
+  renderCard({ lesson: baseLesson, isOwner: true })
+  expect(screen.queryByTitle('Delete lesson')).not.toBeInTheDocument()
+})
+
+it('delete button calls onDelete with the lesson without opening it', () => {
+  const onDelete = vi.fn()
+  renderCard({ lesson: baseLesson, canDelete: true, onDelete })
+  fireEvent.click(screen.getByTitle('Delete lesson'))
+  expect(onDelete).toHaveBeenCalledWith(baseLesson)
+  expect(screen.queryByText('PRACTICE-l1')).not.toBeInTheDocument()
+})
+
 it('handles zero sentence_count without dividing by zero', () => {
   const lesson = { ...baseLesson, sentence_count: 0, progress: { current_sentence: 0, practice_count: 0 } }
   renderCard({ lesson })

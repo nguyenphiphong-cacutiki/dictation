@@ -278,6 +278,9 @@ export default function CreateLesson() {
   const [translatingIdx, setTranslatingIdx] = useState(null)
   const origTrimBoundsRef = useRef({ firstMs: null, lastMs: null })
   const [seekInput, setSeekInput] = useState('')
+  // Non-null while the user is dragging the seek slider: holds the drag position so the
+  // playback rAF loop can't snap the thumb back to the playhead mid-drag.
+  const [scrubTime, setScrubTime] = useState(null)
   const fileInputRef = useRef(null)
   const sentencesBottomRef = useRef(null)
 
@@ -402,7 +405,22 @@ export default function CreateLesson() {
   }
 
   function handleSliderChange(e) {
+    const t = parseFloat(e.target.value)
+    if (scrubTime !== null) {
+      setScrubTime(t) // dragging — just move the thumb, commit on release
+    } else {
+      player.seek(t) // keyboard arrows etc. — seek immediately
+    }
+  }
+
+  function handleScrubStart() {
+    setScrubTime(audioCurrentTime)
+  }
+
+  function handleScrubEnd(e) {
+    if (scrubTime === null) return
     player.seek(parseFloat(e.target.value))
+    setScrubTime(null)
   }
 
   function handleSeekKeyDown(e) {
@@ -521,7 +539,8 @@ export default function CreateLesson() {
     setError('')
   }
 
-  const pct = audioDuration > 0 ? (audioCurrentTime / audioDuration) * 100 : 0
+  const displayTime = scrubTime ?? audioCurrentTime
+  const pct = audioDuration > 0 ? (displayTime / audioDuration) * 100 : 0
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
@@ -592,7 +611,7 @@ export default function CreateLesson() {
               {/* Time */}
               <div className="flex justify-between items-center text-xs font-mono px-0.5">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-primary-600 font-semibold">{formatTime(audioCurrentTime)}</span>
+                  <span className="text-primary-600 font-semibold">{formatTime(displayTime)}</span>
                   <button
                     onClick={() => navigator.clipboard.writeText(formatTime(audioCurrentTime))}
                     className="p-0.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
@@ -617,8 +636,10 @@ export default function CreateLesson() {
                   min={0}
                   max={audioDuration || 100}
                   step={0.1}
-                  value={audioCurrentTime}
+                  value={displayTime}
                   onChange={handleSliderChange}
+                  onPointerDown={handleScrubStart}
+                  onPointerUp={handleScrubEnd}
                   className="absolute inset-x-0 w-full opacity-0 cursor-pointer h-5"
                 />
               </div>

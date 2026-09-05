@@ -42,11 +42,14 @@ it('starts from initialSentence', () => {
   expect(screen.getByText('2 / 2')).toBeInTheDocument()
 })
 
-it('accepts an exact answer and shows transcript with translation', () => {
+it('accepts a correct answer: source sentence fills the input, card shows only the translation', () => {
   const { onProgress } = renderTab()
-  typeAndSubmit('Hello world')
+  const textarea = typeAndSubmit('hello, world!')
   expect(screen.getByText('Correct!')).toBeInTheDocument()
-  expect(screen.getByText('Hello world', { selector: 'p' })).toBeInTheDocument()
+  // The input box is replaced with the original source sentence…
+  expect(textarea.value).toBe('Hello world')
+  // …and the answer card shows only the translation, not the transcript.
+  expect(screen.queryByText('Hello world', { selector: 'p' })).not.toBeInTheDocument()
   expect(screen.getByText('Chào thế giới')).toBeInTheDocument()
   expect(onProgress).toHaveBeenCalledWith(0, false)
 })
@@ -69,10 +72,18 @@ it('hints the first wrong word using the original token', () => {
   expect(screen.getByText('Hint: "world"')).toBeInTheDocument()
 })
 
-it('hints the next missing word', () => {
+it('hints the next missing word and appends a trailing space so typing can continue', () => {
   renderTab()
-  typeAndSubmit('Hello')
+  const textarea = typeAndSubmit('Hello')
   expect(screen.getByText('Next word: "world"')).toBeInTheDocument()
+  expect(textarea.value).toBe('Hello ')
+})
+
+it('does not add another trailing space when the input already ends with one', () => {
+  renderTab()
+  const textarea = typeAndSubmit('Hello ')
+  expect(screen.getByText('Next word: "world"')).toBeInTheDocument()
+  expect(textarea.value).toBe('Hello ')
 })
 
 it('flags too many words', () => {
@@ -119,6 +130,41 @@ it('replay button plays the audio', () => {
   renderTab()
   fireEvent.click(screen.getByTitle('Replay (or press Ctrl)'))
   expect(play).toHaveBeenCalled()
+})
+
+it('lets the user switch the replay shortcut to F2 and persists the choice', () => {
+  const play = vi.spyOn(window.HTMLMediaElement.prototype, 'play')
+  renderTab()
+  fireEvent.change(screen.getByTitle('Keyboard shortcut for Replay'), { target: { value: 'F2' } })
+  fireEvent.keyDown(window, { key: 'Control' })
+  expect(play).not.toHaveBeenCalled() // old shortcut no longer replays
+  fireEvent.keyDown(window, { key: 'F2' })
+  expect(play).toHaveBeenCalledTimes(1)
+  expect(localStorage.getItem('replay_shortcut')).toBe('F2')
+  expect(screen.getByTitle('Replay (or press F2)')).toBeInTheDocument()
+})
+
+it('supports Shift as a replay shortcut', () => {
+  const play = vi.spyOn(window.HTMLMediaElement.prototype, 'play')
+  renderTab()
+  fireEvent.change(screen.getByTitle('Keyboard shortcut for Replay'), { target: { value: 'Shift' } })
+  fireEvent.keyDown(window, { key: 'Shift' })
+  expect(play).toHaveBeenCalled()
+})
+
+it('restores the saved replay shortcut on mount', () => {
+  localStorage.setItem('replay_shortcut', 'F2')
+  const play = vi.spyOn(window.HTMLMediaElement.prototype, 'play')
+  renderTab()
+  expect(screen.getByTitle('Replay (or press F2)')).toBeInTheDocument()
+  fireEvent.keyDown(window, { key: 'F2' })
+  expect(play).toHaveBeenCalled()
+})
+
+it('falls back to Ctrl when the stored shortcut value is invalid', () => {
+  localStorage.setItem('replay_shortcut', 'CapsLock')
+  renderTab()
+  expect(screen.getByTitle('Replay (or press Ctrl)')).toBeInTheDocument()
 })
 
 it('renders nothing when the sentence index is out of range', () => {
