@@ -1,4 +1,5 @@
 import os
+
 import pytest
 
 os.environ.setdefault("JWT_SECRET", "test-secret")

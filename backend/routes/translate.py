@@ -4,7 +4,7 @@ import urllib.error
 import urllib.request
 
 from shared.auth import require_user
-from shared.response import ok, fail
+from shared.response import fail, ok
 from shared.secrets import get_secret
 
 OPENAI_URL = "https://api.openai.com/v1/chat/completions"
@@ -28,7 +28,7 @@ _TIMEOUT = 25
 
 def handle(event, method, path):
     if method == "POST" and path == "/translate":
-        user, err = require_user(event)
+        _user, err = require_user(event)
         if err:
             return err
         return _translate(event)

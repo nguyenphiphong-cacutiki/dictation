@@ -70,6 +70,7 @@ amplify/
 *.pfx
 secrets.*
 !secrets.example.*
+!backend/shared/secrets.py
 local.*
 !local.example.*
 

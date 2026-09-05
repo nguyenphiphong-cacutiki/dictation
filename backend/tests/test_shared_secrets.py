@@ -36,7 +36,7 @@ def test_get_secret_is_cached():
 
 
 def test_auth_uses_ssm_when_param_set():
-    import shared.auth as auth
+    from shared import auth
     with patch.object(auth, "_PARAM", "/dictation/dev/jwt_secret"), \
          patch("shared.auth.get_secret", return_value="ssm-secret") as gs:
         token = auth.create_token("u1", "e@x.com", False)

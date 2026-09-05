@@ -1,8 +1,8 @@
 import json
 
 from shared.auth import require_admin
-from shared.db import table, CONFIG_TABLE
-from shared.response import ok, fail
+from shared.db import CONFIG_TABLE, table
+from shared.response import fail, ok
 
 _ABOUT_KEY = "about"
 
@@ -11,7 +11,7 @@ def handle(event, method, path):
     if method == "GET" and path == "/about":
         return _get()
     if method == "PUT" and path == "/admin/about":
-        user, err = require_admin(event)
+        _user, err = require_admin(event)
         if err:
             return err
         return _put(event)

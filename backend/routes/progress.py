@@ -2,8 +2,8 @@ import json
 from datetime import datetime, timezone
 
 from shared.auth import require_user
-from shared.db import table, PROGRESS_TABLE
-from shared.response import ok, fail
+from shared.db import PROGRESS_TABLE, table
+from shared.response import fail, ok
 
 
 def handle(event, method, path):

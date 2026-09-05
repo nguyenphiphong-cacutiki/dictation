@@ -3,9 +3,8 @@ import os
 import uuid
 
 import boto3
-
 from shared.auth import require_user
-from shared.response import ok, fail
+from shared.response import fail, ok
 
 _s3 = None
 AUDIO_BUCKET = os.environ.get("AUDIO_BUCKET", "")

@@ -4,10 +4,9 @@ import uuid
 from datetime import datetime, timezone
 
 import boto3
-
-from shared.auth import require_user, get_user
-from shared.db import table, ddb, LESSONS_TABLE, PROGRESS_TABLE
-from shared.response import ok, fail
+from shared.auth import get_user, require_user
+from shared.db import LESSONS_TABLE, PROGRESS_TABLE, ddb, table
+from shared.response import fail, ok
 
 _s3 = None
 AUDIO_BUCKET = os.environ.get("AUDIO_BUCKET", "")

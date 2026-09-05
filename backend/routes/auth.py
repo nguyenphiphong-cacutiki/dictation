@@ -6,14 +6,13 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import boto3
-
 from shared.auth import create_token
-from shared.db import table, USERS_TABLE, OTP_TABLE, SESSIONS_TABLE
-from shared.response import ok, fail
+from shared.db import OTP_TABLE, SESSIONS_TABLE, USERS_TABLE, table
+from shared.response import fail, ok
 
 _ses = None
 FROM_EMAIL = os.environ.get("FROM_EMAIL", "")
-ADMIN_EMAILS = set(e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip())
+ADMIN_EMAILS = {e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()}
 
 
 def ses():
