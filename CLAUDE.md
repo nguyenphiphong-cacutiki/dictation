@@ -46,6 +46,9 @@ terraform fmt -recursive terraform/
 
 Then re-run `./ci.sh terraform-fmt` to confirm.
 
+## test aware
+After completing any code changes (feature, bug fix, or refactor), always apply the `testdoc_cover` skill to ensure adequate test coverage and quality before reporting completion.
+
 ### Lock file out of sync
 
 If `frontend-audit` or `frontend-lint` fails with a lock file sync error:
